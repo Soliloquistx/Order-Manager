@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>订单管理</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div>
+        <h1>订单管理</h1>
+        <p>订单台账 / 跟进工作台</p>
+      </div>
+      <div class="actions">
+        <button class="btn primary" onclick="openOrderModal()">新增订单</button>
+        <button class="btn" onclick="openImportModal()">导入订单</button>
+        <button class="btn" onclick="exportOrders()">导出结果</button>
+      </div>
+    </header>
+
+    <section class="filters card">
+      <div class="grid filters-grid">
+        <input id="keyword" placeholder="搜索：订单号 / 产品名 / 客户名 / 手机号" />
+        <select id="channel"></select>
+        <select id="owner_id"></select>
+        <select id="order_status"></select>
+        <select id="payment_status"></select>
+        <select id="follow_status"></select>
+        <input id="departure_from" type="date" />
+        <input id="departure_to" type="date" />
+      </div>
+      <div class="filter-actions">
+        <button class="btn primary" onclick="loadOrders()">查询</button>
+        <button class="btn" onclick="resetFilters()">重置筛选</button>
+      </div>
+    </section>
+
+    <section class="stats-row" id="statsRow"></section>
+
+    <section class="card table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>订单号</th>
+            <th>产品名称</th>
+            <th>线路</th>
+            <th>客户姓名</th>
+            <th>渠道</th>
+            <th>出发日期</th>
+            <th>人数</th>
+            <th>总金额</th>
+            <th>支付状态</th>
+            <th>订单状态</th>
+            <th>跟进状态</th>
+            <th>负责人</th>
+            <th>最后跟进</th>
+            <th>最新备注</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="orderTableBody"></tbody>
+      </table>
+      <div id="emptyState" class="empty" hidden>当前暂无订单数据</div>
+    </section>
+  </div>
+
+  <div id="drawer" class="drawer hidden">
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <div>
+          <h2 id="drawerTitle">订单详情</h2>
+          <p id="drawerSubtitle"></p>
+        </div>
+        <div class="actions">
+          <button class="btn" id="editOrderBtn">编辑</button>
+          <button class="btn" onclick="closeDrawer()">关闭</button>
+        </div>
+      </div>
+      <div id="drawerContent" class="drawer-content"></div>
+    </div>
+  </div>
+
+  <div id="orderModal" class="modal hidden">
+    <div class="modal-panel large">
+      <div class="modal-header">
+        <h2 id="orderModalTitle">新增订单</h2>
+        <button class="icon-btn" onclick="closeOrderModal()">×</button>
+      </div>
+      <form id="orderForm" class="form-grid" onsubmit="submitOrder(event)"></form>
+    </div>
+  </div>
+
+  <div id="noteModal" class="modal hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>添加跟进记录</h2>
+        <button class="icon-btn" onclick="closeNoteModal()">×</button>
+      </div>
+      <form id="noteForm" onsubmit="submitNote(event)">
+        <div class="field"><label>记录类型</label><select name="note_type" id="note_type"></select></div>
+        <div class="field"><label>记录内容</label><textarea name="content" id="note_content" rows="6" required></textarea></div>
+        <div class="field"><label>下次跟进时间</label><input name="next_follow_up_at" id="note_next_follow_up_at" type="datetime-local" /></div>
+        <div class="field"><label>同步修改跟进状态</label><select id="note_follow_status_after" name="follow_status_after"></select></div>
+        <div class="form-actions"><button class="btn primary" type="submit">保存</button><button class="btn" type="button" onclick="closeNoteModal()">取消</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="importModal" class="modal hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>导入订单（CSV）</h2>
+        <button class="icon-btn" onclick="closeImportModal()">×</button>
+      </div>
+      <div class="field">
+        <label>模板说明</label>
+        <div class="tip-box">请使用 UTF-8 CSV。必填列：订单号、产品名称、客户姓名、渠道、出发日期、成人数、支付状态、订单状态、跟进状态。</div>
+      </div>
+      <form id="importForm" onsubmit="submitImport(event)">
+        <div class="field"><label>选择 CSV 文件</label><input id="importFile" name="file" type="file" accept=".csv" required /></div>
+        <div id="importResult" class="import-result hidden"></div>
+        <div class="form-actions"><button class="btn primary" type="submit">开始导入</button><button class="btn" type="button" onclick="closeImportModal()">取消</button></div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const STATUS_OPTIONS = {
+      payment_status: ['', '未支付', '部分支付', '已支付', '已退款'],
+      order_status: ['', '待确认', '已确认', '已出行', '已完成', '已取消', '已关闭'],
+      follow_status: ['', '待跟进', '跟进中', '待客户反馈', '待内部处理', '已解决', '已搁置'],
+      priority: ['低', '普通', '高', '紧急'],
+      note_type: ['普通备注', '电话沟通', '微信沟通', '内部处理', '风险记录', '系统说明']
+    };
+    const CHANNEL_OPTIONS = ['', '携程', '微信', '抖音', '小红书', '老客转介绍', '其他'];
+    let users = [];
+    let currentOrderId = null;
+    let editingOrderId = null;
+
+    function fillSelect(selectId, options, placeholder) {
+      const el = document.getElementById(selectId);
+      if (!el) return;
+      el.innerHTML = '';
+      const first = document.createElement('option');
+      first.value = '';
+      first.textContent = placeholder;
+      el.appendChild(first);
+      options.filter(Boolean).forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        el.appendChild(opt);
+      });
+    }
+
+    async function init() {
+      const userResp = await fetch('/api/users');
+      users = await userResp.json();
+      fillSelect('channel', CHANNEL_OPTIONS, '渠道');
+      fillSelect('order_status', STATUS_OPTIONS.order_status, '订单状态');
+      fillSelect('payment_status', STATUS_OPTIONS.payment_status, '支付状态');
+      fillSelect('follow_status', STATUS_OPTIONS.follow_status, '跟进状态');
+      fillSelect('note_type', STATUS_OPTIONS.note_type, '记录类型');
+      fillSelect('note_follow_status_after', STATUS_OPTIONS.follow_status, '不修改');
+      const owner = document.getElementById('owner_id');
+      owner.innerHTML = '<option value="">负责人</option>' + users.map(u => `<option value="${u.id}">${u.display_name}</option>`).join('');
+      buildOrderForm();
+      await loadOrders();
+    }
+
+    function qs() {
+      const params = new URLSearchParams();
+      ['keyword','channel','owner_id','order_status','payment_status','follow_status','departure_from','departure_to'].forEach(id => {
+        const val = document.getElementById(id).value;
+        if (val) params.set(id, val);
+      });
+      return params.toString();
+    }
+
+    async function loadOrders() {
+      const resp = await fetch('/api/orders?' + qs());
+      const data = await resp.json();
+      renderStats(data.stats);
+      renderTable(data.orders);
+    }
+
+    function renderStats(stats) {
+      const row = document.getElementById('statsRow');
+      row.innerHTML = [
+        ['总订单', stats.total || 0],
+        ['待跟进', stats['待跟进'] || 0],
+        ['待确认', stats['待确认'] || 0],
+        ['已支付未确认', stats['已支付未确认'] || 0],
+        ['临近出发', stats['临近出发'] || 0],
+        ['超期未跟进', stats['超期未跟进'] || 0],
+      ].map(([label, value]) => `<div class="stat card"><span>${label}</span><strong>${value}</strong></div>`).join('');
+    }
+
+    function renderTable(rows) {
+      const body = document.getElementById('orderTableBody');
+      const empty = document.getElementById('emptyState');
+      body.innerHTML = '';
+      if (!rows.length) {
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${esc(row.order_no)}</td>
+          <td>${esc(row.product_name)}</td>
+          <td>${esc(row.route_name || '')}</td>
+          <td>${esc(row.customer_name)}</td>
+          <td>${esc(row.channel)}</td>
+          <td>${esc(row.departure_date)}</td>
+          <td>${row.traveler_count || 0}</td>
+          <td>${money(row.total_amount)}</td>
+          <td>${statusSelect(row.id, 'payment_status', STATUS_OPTIONS.payment_status.filter(Boolean), row.payment_status, 'blue')}</td>
+          <td>${statusSelect(row.id, 'order_status', STATUS_OPTIONS.order_status.filter(Boolean), row.order_status, 'amber')}</td>
+          <td>${statusSelect(row.id, 'follow_status', STATUS_OPTIONS.follow_status.filter(Boolean), row.follow_status, 'green')}</td>
+          <td>${esc(row.owner_name || '')}</td>
+          <td>${esc(row.last_follow_up_at || '')}</td>
+          <td class="remark">${esc(row.latest_note_summary || '')}</td>
+          <td>
+            <button class="link-btn" onclick="openDrawer(${row.id})">详情</button>
+            <button class="link-btn" onclick="openNoteModal(${row.id})">备注</button>
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    async function openDrawer(orderId) {
+      currentOrderId = orderId;
+      const resp = await fetch(`/api/orders/${orderId}`);
+      const data = await resp.json();
+      document.getElementById('drawerTitle').textContent = data.order.product_name;
+      document.getElementById('drawerSubtitle').textContent = `订单号：${data.order.order_no}`;
+      document.getElementById('editOrderBtn').onclick = () => openOrderModal(data.order);
+      const notesHtml = data.notes.map(n => `
+        <div class="timeline-item">
+          <div class="timeline-meta">${esc(n.created_at)} · ${esc(n.created_by_name || '')} · ${esc(n.note_type)}</div>
+          <div class="timeline-content">${esc(n.content)}</div>
+        </div>
+      `).join('') || '<div class="empty-inline">暂无备注</div>';
+      const logsHtml = data.logs.slice(0,5).map(l => `<li>${esc(l.created_at)} · ${esc(l.description || l.action)}</li>`).join('') || '<li>暂无日志</li>';
+      document.getElementById('drawerContent').innerHTML = `
+        <div class="drawer-section"><h3>基础信息</h3><div class="kv-grid">
+          <div><label>订单号</label><span>${esc(data.order.order_no)}</span></div>
+          <div><label>外部单号</label><span>${esc(data.order.external_order_no || '')}</span></div>
+          <div><label>产品名称</label><span>${esc(data.order.product_name)}</span></div>
+          <div><label>线路</label><span>${esc(data.order.route_name || '')}</span></div>
+          <div><label>渠道</label><span>${esc(data.order.channel)}</span></div>
+          <div><label>负责人</label><span>${esc(data.order.owner_name || '')}</span></div>
+        </div></div>
+        <div class="drawer-section"><h3>客户与出行</h3><div class="kv-grid">
+          <div><label>客户姓名</label><span>${esc(data.order.customer_name)}</span></div>
+          <div><label>手机号</label><span>${esc(data.order.customer_phone || '')}</span></div>
+          <div><label>出发日期</label><span>${esc(data.order.departure_date)}</span></div>
+          <div><label>返程日期</label><span>${esc(data.order.return_date || '')}</span></div>
+          <div><label>成人/儿童</label><span>${data.order.adult_count}/${data.order.child_count}</span></div>
+          <div><label>房间数</label><span>${data.order.room_count || ''}</span></div>
+        </div></div>
+        <div class="drawer-section"><h3>金额与状态</h3><div class="kv-grid">
+          <div><label>总金额</label><span>${money(data.order.total_amount)}</span></div>
+          <div><label>已付金额</label><span>${money(data.order.paid_amount)}</span></div>
+          <div><label>未付金额</label><span>${money(data.order.unpaid_amount)}</span></div>
+          <div><label>支付状态</label><span>${esc(data.order.payment_status)}</span></div>
+          <div><label>订单状态</label><span>${esc(data.order.order_status)}</span></div>
+          <div><label>跟进状态</label><span>${esc(data.order.follow_status)}</span></div>
+        </div></div>
+        <div class="drawer-section"><div class="section-head"><h3>备注时间线</h3><button class="btn" onclick="openNoteModal(${data.order.id})">新增备注</button></div>${notesHtml}</div>
+        <div class="drawer-section"><h3>最近日志</h3><ul class="log-list">${logsHtml}</ul></div>
+      `;
+      document.getElementById('drawer').classList.remove('hidden');
+    }
+
+    function closeDrawer() { document.getElementById('drawer').classList.add('hidden'); }
+
+    function buildOwnerSelect(selectedId) {
+      return `<select name="owner_id">${users.map(u => `<option value="${u.id}" ${String(u.id)===String(selectedId || 1) ? 'selected' : ''}>${u.display_name}</option>`).join('')}</select>`;
+    }
+
+    function buildOrderForm(order = null) {
+      editingOrderId = order ? order.id : null;
+      document.getElementById('orderModalTitle').textContent = editingOrderId ? '编辑订单' : '新增订单';
+      const form = document.getElementById('orderForm');
+      const selectHtml = (name, options, value = '') => `<select name="${name}">${options.map(v => `<option value="${v}" ${String(v)===String(value)?'selected':''}>${v}</option>`).join('')}</select>`;
+      form.innerHTML = `
+        ${field('订单号', `<input name="order_no" required value="${escAttr(order?.order_no || '')}" />`)}
+        ${field('外部单号', `<input name="external_order_no" value="${escAttr(order?.external_order_no || '')}" />`)}
+        ${field('产品名称', `<input name="product_name" required value="${escAttr(order?.product_name || '')}" />`)}
+        ${field('线路', `<input name="route_name" value="${escAttr(order?.route_name || '')}" />`)}
+        ${field('渠道', selectHtml('channel', CHANNEL_OPTIONS.filter(Boolean), order?.channel || '携程'))}
+        ${field('来源平台', `<input name="source_platform" value="${escAttr(order?.source_platform || '')}" />`)}
+        ${field('客户姓名', `<input name="customer_name" required value="${escAttr(order?.customer_name || '')}" />`)}
+        ${field('客户手机号', `<input name="customer_phone" value="${escAttr(order?.customer_phone || '')}" />`)}
+        ${field('备用联系方式', `<input name="backup_contact" value="${escAttr(order?.backup_contact || '')}" />`)}
+        ${field('出发日期', `<input name="departure_date" type="date" required value="${escAttr(order?.departure_date || '')}" />`)}
+        ${field('返程日期', `<input name="return_date" type="date" value="${escAttr(order?.return_date || '')}" />`)}
+        ${field('成人数', `<input name="adult_count" type="number" min="1" value="${escAttr(order?.adult_count ?? 1)}" />`)}
+        ${field('儿童数', `<input name="child_count" type="number" min="0" value="${escAttr(order?.child_count ?? 0)}" />`)}
+        ${field('房间数', `<input name="room_count" type="number" min="0" value="${escAttr(order?.room_count ?? '')}" />`)}
+        ${field('总金额', `<input name="total_amount" type="number" step="0.01" value="${escAttr(order?.total_amount ?? '')}" />`)}
+        ${field('已付金额', `<input name="paid_amount" type="number" step="0.01" value="${escAttr(order?.paid_amount ?? 0)}" />`)}
+        ${field('支付状态', selectHtml('payment_status', STATUS_OPTIONS.payment_status.filter(Boolean), order?.payment_status || '未支付'))}
+        ${field('订单状态', selectHtml('order_status', STATUS_OPTIONS.order_status.filter(Boolean), order?.order_status || '待确认'))}
+        ${field('跟进状态', selectHtml('follow_status', STATUS_OPTIONS.follow_status.filter(Boolean), order?.follow_status || '待跟进'))}
+        ${field('负责人', buildOwnerSelect(order?.owner_id || 1))}
+        ${field('优先级', selectHtml('priority', STATUS_OPTIONS.priority, order?.priority || '普通'))}
+        ${field('下次跟进时间', `<input name="next_follow_up_at" type="datetime-local" value="${toDatetimeLocal(order?.next_follow_up_at || '')}" />`)}
+        <div class="field span-2"><label>客户备注</label><textarea name="customer_note" rows="3">${esc(order?.customer_note || '')}</textarea></div>
+        <div class="field span-2"><label>初始备注</label><textarea name="initial_note" rows="4"></textarea></div>
+        <div class="form-actions span-2"><button class="btn primary" type="submit">保存</button><button class="btn" type="button" onclick="closeOrderModal()">取消</button></div>
+      `;
+    }
+
+    function field(label, control) { return `<div class="field"><label>${label}</label>${control}</div>`; }
+    function openOrderModal(order = null) { buildOrderForm(order); document.getElementById('orderModal').classList.remove('hidden'); }
+    function closeOrderModal() { document.getElementById('orderModal').classList.add('hidden'); }
+    function openNoteModal(orderId) { currentOrderId = orderId; document.getElementById('noteForm').reset(); document.getElementById('noteModal').classList.remove('hidden'); }
+    function closeNoteModal() { document.getElementById('noteModal').classList.add('hidden'); }
+    function openImportModal() {
+      document.getElementById('importForm').reset();
+      document.getElementById('importResult').classList.add('hidden');
+      document.getElementById('importResult').innerHTML = '';
+      document.getElementById('importModal').classList.remove('hidden');
+    }
+    function closeImportModal() { document.getElementById('importModal').classList.add('hidden'); }
+
+    async function submitOrder(event) {
+      event.preventDefault();
+      const formData = new FormData(event.target);
+      const payload = Object.fromEntries(formData.entries());
+      ['adult_count','child_count','room_count','owner_id'].forEach(k => { if (payload[k] !== '') payload[k] = Number(payload[k]); });
+      ['total_amount','paid_amount'].forEach(k => { if (payload[k] !== '') payload[k] = Number(payload[k]); else payload[k] = null; });
+      const method = editingOrderId ? 'PUT' : 'POST';
+      const url = editingOrderId ? `/api/orders/${editingOrderId}` : '/api/orders';
+      const resp = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+      if (!resp.ok) { alert((await resp.json()).detail || '保存失败'); return; }
+      closeOrderModal();
+      await loadOrders();
+      if (editingOrderId) await openDrawer(editingOrderId);
+    }
+
+    async function submitNote(event) {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(event.target).entries());
+      const resp = await fetch(`/api/orders/${currentOrderId}/notes`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+      if (!resp.ok) { alert('备注保存失败'); return; }
+      closeNoteModal();
+      await loadOrders();
+      if (currentOrderId) await openDrawer(currentOrderId);
+    }
+
+    async function submitImport(event) {
+      event.preventDefault();
+      const formData = new FormData();
+      const fileInput = document.getElementById('importFile');
+      if (!fileInput.files.length) {
+        alert('请选择 CSV 文件');
+        return;
+      }
+      formData.append('file', fileInput.files[0]);
+      const resp = await fetch('/api/orders/import', { method: 'POST', body: formData });
+      const resultBox = document.getElementById('importResult');
+      const data = await resp.json();
+      if (!resp.ok) {
+        resultBox.classList.remove('hidden');
+        resultBox.innerHTML = `<div class="result-error">导入失败：${esc(data.detail || '未知错误')}</div>`;
+        return;
+      }
+      const failedHtml = (data.failed || []).length ? `<ul>${data.failed.map(item => `<li>第 ${item.line} 行：${esc(item.error)}${item.order_no ? `（订单号：${esc(item.order_no)}）` : ''}</li>`).join('')}</ul>` : '<div>无失败记录</div>';
+      resultBox.classList.remove('hidden');
+      resultBox.innerHTML = `
+        <div class="result-ok">成功 ${data.success} 条，失败 ${(data.failed || []).length} 条，总计 ${data.total} 条</div>
+        <div class="result-detail">${failedHtml}</div>
+      `;
+      await loadOrders();
+    }
+
+    function resetFilters() {
+      ['keyword','channel','owner_id','order_status','payment_status','follow_status','departure_from','departure_to'].forEach(id => document.getElementById(id).value = '');
+      loadOrders();
+    }
+
+    function exportOrders() {
+      const url = '/api/orders/export' + (qs() ? ('?' + qs()) : '');
+      window.open(url, '_blank');
+    }
+
+    function statusSelect(orderId, field, options, currentValue, tone) {
+      return `<select class="status-select ${tone}" onchange="quickUpdateStatus(${orderId}, '${field}', this.value)">${options.map(v => `<option value="${v}" ${String(v)===String(currentValue)?'selected':''}>${v}</option>`).join('')}</select>`;
+    }
+
+    async function quickUpdateStatus(orderId, field, value) {
+      const payload = { payment_status: null, order_status: null, follow_status: null };
+      payload[field] = value;
+      const resp = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) {
+        alert('状态更新失败');
+        await loadOrders();
+        return;
+      }
+      await loadOrders();
+      if (currentOrderId === orderId && !document.getElementById('drawer').classList.contains('hidden')) {
+        await openDrawer(orderId);
+      }
+    }
+
+    function badge(text, tone) { return `<span class="badge ${tone}">${esc(text || '')}</span>`; }
+    function money(v) { return v === null || v === undefined || v === '' ? '' : '¥' + Number(v).toFixed(2); }
+    function esc(text) { return String(text ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+    function escAttr(text) { return esc(text); }
+    function toDatetimeLocal(v) { return v ? String(v).replace(' ', 'T').slice(0,16) : ''; }
+
+    init();
+  </script>
+</body>
+</html>
