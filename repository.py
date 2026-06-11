@@ -8,6 +8,21 @@ def row_to_dict(row) -> dict[str, Any]:
     return dict(row) if row else {}
 
 
+def get_order_by_order_no(order_no: str) -> dict[str, Any] | None:
+    with db_cursor() as conn:
+        row = conn.execute(
+            '''
+            SELECT o.*, u.display_name AS owner_name,
+                   COALESCE(o.total_amount, 0) - COALESCE(o.paid_amount, 0) AS unpaid_amount
+            FROM orders o
+            LEFT JOIN users u ON u.id = o.owner_id
+            WHERE o.order_no = ?
+            ''',
+            (order_no,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
 def list_users() -> list[dict[str, Any]]:
     with db_cursor() as conn:
         rows = conn.execute(
@@ -31,6 +46,11 @@ def build_order_filters(params: dict[str, str]) -> tuple[str, list[Any]]:
         if value:
             clauses.append(f"o.{field} = ?")
             values.append(value)
+
+    route_name = (params.get("route_name") or "").strip()
+    if route_name:
+        clauses.append("COALESCE(o.route_name, '') LIKE ?")
+        values.append(f"%{route_name}%")
 
     departure_from = (params.get("departure_from") or "").strip()
     departure_to = (params.get("departure_to") or "").strip()
@@ -171,6 +191,27 @@ def create_order(data: dict[str, Any]) -> int:
         return order_id
 
 
+def upsert_order(data: dict[str, Any]) -> tuple[int, str]:
+    order_no = (data.get("order_no") or "").strip()
+    if not order_no:
+        raise ValueError("订单号不能为空")
+    with db_cursor() as conn:
+        row = conn.execute("SELECT id FROM orders WHERE order_no = ?", (order_no,)).fetchone()
+    if row:
+        order_id = int(row["id"])
+        old = get_order(order_id) or {}
+        payload = {**old, **data}
+        payload["order_no"] = order_no
+        payload["external_order_no"] = data.get("external_order_no") or old.get("external_order_no") or order_no
+        payload["owner_id"] = data.get("owner_id") or old.get("owner_id") or 1
+        payload["follow_status"] = old.get("follow_status") or data.get("follow_status") or "待跟进"
+        payload["priority"] = old.get("priority") or data.get("priority") or "普通"
+        payload["next_follow_up_at"] = data.get("next_follow_up_at") or old.get("next_follow_up_at") or ""
+        update_order(order_id, payload)
+        return order_id, "updated"
+    return create_order(data), "created"
+
+
 def update_order(order_id: int, data: dict[str, Any]) -> None:
     old = get_order(order_id)
     if not old:
@@ -218,6 +259,40 @@ def patch_status(order_id: int, payload: dict[str, Any], created_by: int = 1) ->
             return
         updates.append("updated_at = ?")
         params.append(utc_now_str())
+        params.append(order_id)
+        conn.execute(f"UPDATE orders SET {', '.join(updates)} WHERE id = ?", params)
+
+
+def patch_workspace_fields(order_id: int, payload: dict[str, Any], created_by: int = 1) -> None:
+    order = get_order(order_id)
+    if not order:
+        raise ValueError("订单不存在")
+
+    field_map = {
+        "route_name": "路线",
+        "owner_id": "负责人",
+        "customer_note": "备注",
+    }
+    updates = []
+    params: list[Any] = []
+    now = utc_now_str()
+    with db_cursor() as conn:
+        for field, label in field_map.items():
+            if field not in payload:
+                continue
+            new_value = payload.get(field)
+            old_value = order.get(field)
+            if field == "customer_note":
+                new_value = (new_value or "").strip()
+            if new_value == old_value:
+                continue
+            updates.append(f"{field} = ?")
+            params.append(new_value)
+            create_log(conn, order_id, f"update_{field}", field, old_value, new_value, f"{label} 更新", created_by)
+        if not updates:
+            return
+        updates.append("updated_at = ?")
+        params.append(now)
         params.append(order_id)
         conn.execute(f"UPDATE orders SET {', '.join(updates)} WHERE id = ?", params)
 
