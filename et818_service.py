@@ -186,14 +186,24 @@ def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) 
             input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'a', bubbles: true }}));
             input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'a', bubbles: true }}));
             setTimeout(() => {{
-              const items = [...doc.querySelectorAll('.dropdown-item')];
+              let items = [...doc.querySelectorAll('.dropdown-item')];
               let item = items.find(el => (el.innerText || el.textContent || '').trim() === finalName);
               if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(finalName));
               if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(keyword));
-              if (!item) return resolve({{ ok:false, detail:'未出现匹配的线路模板候选', candidates: items.map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).slice(0,20) }});
+              if (!item) {{
+                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
+                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
+                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
+                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'Enter', bubbles: true }}));
+                items = [...doc.querySelectorAll('.dropdown-item')];
+                item = items.find(el => (el.innerText || el.textContent || '').trim() === finalName)
+                  || items.find(el => (el.innerText || el.textContent || '').trim().includes(finalName))
+                  || items.find(el => (el.innerText || el.textContent || '').trim().includes(keyword));
+              }}
+              if (!item) return resolve({{ ok:false, detail:'未出现匹配的线路模板候选', candidates: items.map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).slice(0,20), keyword, finalName }});
               item.click();
               resolve({{ ok:true, detail:'线路模板已选中', template_name: finalName, input_value: input.value || '' }});
-            }}, 1200);
+            }}, 2000);
           }} catch (e) {{
             resolve({{ ok:false, detail:e.message || String(e) }});
           }}
@@ -345,6 +355,201 @@ def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> E
         transport_name=result.get("transport_name", order_info.transport_name),
         team_category=result.get("team_category", order_info.team_category),
         required_main=result.get("required_main", []),
+        detail=result.get("detail", ""),
+    )
+
+
+def et818_autofill_travellers(order_id: int, payload: Et818AutofillActionPayload) -> Et818AutofillReport:
+    order = get_order_or_raise(order_id)
+    payload_response = build_et818_payload_response(order_id)
+    travellers = payload_response.et818_payload.travellers
+    traveller_count = len(travellers)
+
+    if not travellers:
+        raise Et818BridgeError("没有客人数据，无法填写客人名单")
+
+    travellers_json = json.dumps([{
+        'name': t.name,
+        'phone': '',
+        'id_type': t.id_type,
+        'id_no': t.id_no,
+        'gender': t.gender,
+        'birth_date': t.birth_date.model_dump(),
+        'age': t.age,
+        'native_place': t.native_place,
+        'note': t.note,
+        'person_type': t.person_type,
+    } for t in travellers], ensure_ascii=False)
+
+    result = bridge.eval(
+        f'''(() => new Promise(resolve => setTimeout(() => {{
+          try {{
+            const token = {json.dumps(payload.token, ensure_ascii=False)};
+            const travellers = {travellers_json};
+            const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
+            if (!frame || !frame.contentWindow) return resolve({{ ok:false, detail:'未找到客人页 iframe' }});
+            const win = frame.contentWindow;
+            const doc = win.document;
+
+            const guestTables = [...doc.querySelectorAll('#guestTable')];
+            const bodyTable = guestTables.find(t => t.querySelector('tbody'));
+            if (!bodyTable) return resolve({{ ok:false, detail:'未找到客人 body table' }});
+
+            const tbody = bodyTable.querySelector('tbody');
+            const rows = [...tbody.querySelectorAll('tr')];
+
+            const fillInput = (cell, idx, value) => {{
+              const el = cell?.querySelectorAll('input')[idx];
+              if (el) {{ el.value = String(value||''); el.dispatchEvent(new win.Event('input',{{bubbles:true}})); el.dispatchEvent(new win.Event('change',{{bubbles:true}})); }}
+            }};
+            const fillSelect = (cell, value) => {{
+              const sel = cell?.querySelector('select');
+              if (sel && value) {{ sel.value = value; sel.dispatchEvent(new win.Event('change',{{bubbles:true}})); }}
+            }};
+            const fillDate = (cell, parts) => {{
+              if (!cell || !parts) return;
+              const inputs = [...cell.querySelectorAll('input')];
+              if (inputs[0]) {{ inputs[0].value = parts.year||''; inputs[0].dispatchEvent(new win.Event('input',{{bubbles:true}})); }}
+              if (inputs[1]) {{ inputs[1].value = parts.month||''; inputs[1].dispatchEvent(new win.Event('input',{{bubbles:true}})); }}
+              if (inputs[2]) {{ inputs[2].value = parts.day||''; inputs[2].dispatchEvent(new win.Event('input',{{bubbles:true}})); }}
+            }};
+
+            const results = [];
+            for (let ri = 0; ri < travellers.length && ri < rows.length; ri += 1) {{
+              const cells = [...rows[ri].querySelectorAll('td')];
+              const t = travellers[ri];
+              const cell = (n) => cells[n] || null;
+              fillInput(cell(1), 0, t.name);
+              fillSelect(cell(3), t.id_type);
+              fillInput(cell(4), 0, t.id_no);
+              fillSelect(cell(5), t.gender);
+              fillDate(cell(6), t.birth_date);
+              fillInput(cell(7), 0, t.age);
+              fillInput(cell(9), 0, t.native_place);
+              fillInput(cell(10), 0, t.note);
+              const rn = cell(1)?.querySelector('input')?.value || '';
+              const rid = cell(4)?.querySelector('input')?.value || '';
+              results.push({{ name: rn, id_no: rid }});
+            }}
+
+            resolve({{
+              ok:true,
+              detail:'客人名单已填写',
+              traveller_count: travellers.length,
+              filled: results,
+            }});
+          }} catch (e) {{
+            resolve({{ ok:false, detail:e.message || String(e) }});
+          }}
+        }}, 500)))()''',
+        timeout=50,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "客人名单填写失败")
+    return Et818AutofillReport(
+        ok=True,
+        phase="travellers",
+        order_id=order_id,
+        order_no=order.get("order_no", "") or "",
+        token=payload.token,
+        add_url=payload.add_url,
+        traveller_count=result.get("traveller_count", traveller_count),
+        detail=result.get("detail", ""),
+    )
+
+
+def et818_autofill_pickup(order_id: int, payload: Et818AutofillActionPayload) -> Et818AutofillReport:
+    order = get_order_or_raise(order_id)
+    payload_response = build_et818_payload_response(order_id)
+    pickup_items = payload_response.et818_payload.pickup_dropoff
+    pickup_count = len(pickup_items)
+
+    if not pickup_items:
+        raise Et818BridgeError("没有接送数据")
+
+    pickups_json = json.dumps([{
+        'action': p.action,
+        'date': p.date.model_dump(),
+        'location': p.location,
+        'flight_no': p.flight_no,
+        'time': p.time,
+        'description': p.description,
+    } for p in pickup_items], ensure_ascii=False)
+
+    result = bridge.eval(
+        f'''(() => new Promise(resolve => setTimeout(() => {{
+          try {{
+            const token = {json.dumps(payload.token, ensure_ascii=False)};
+            const pickups = {pickups_json};
+            const rowIndexes = [1, 4];
+            const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
+            if (!frame || !frame.contentWindow) return resolve({{ ok:false, detail:'未找到接送页 iframe' }});
+            const win = frame.contentWindow;
+            const doc = win.document;
+
+            const pickupTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('班次时间') && (t.innerText || '').includes('接送描述'));
+            if (!pickupTable) return resolve({{ ok:false, detail:'未找到订单接送表' }});
+
+            const rows = [...pickupTable.querySelectorAll('tr')];
+            const fillInput = (cell, value) => {{
+              const el = cell?.querySelector('input');
+              if (el) {{ el.value = String(value||''); el.dispatchEvent(new win.Event('input',{{bubbles:true}})); el.dispatchEvent(new win.Event('change',{{bubbles:true}})); }}
+            }};
+            const fillSelect = (cell, value) => {{
+              const sel = cell?.querySelector('select');
+              if (sel && value) {{ sel.value = value; sel.dispatchEvent(new win.Event('change',{{bubbles:true}})); }}
+            }};
+            const fillDate = (cell, parts) => {{
+              if (!cell || !parts) return;
+              const inputs = [...cell.querySelectorAll('input')];
+              if (inputs[0]) {{ inputs[0].value = parts.year||''; inputs[0].dispatchEvent(new win.Event('input',{{bubbles:true}})); }}
+              if (inputs[1]) {{ inputs[1].value = parts.month||''; inputs[1].dispatchEvent(new win.Event('input',{{bubbles:true}})); }}
+              if (inputs[2]) {{ inputs[2].value = parts.day||''; inputs[2].dispatchEvent(new win.Event('input',{{bubbles:true}})); }}
+            }};
+
+            const results = [];
+            for (let pi = 0; pi < pickups.length && pi < rowIndexes.length; pi += 1) {{
+              const row = rows[rowIndexes[pi]];
+              if (!row) continue;
+              const cells = [...row.querySelectorAll('td')];
+              const p = pickups[pi];
+              const cell = (n) => cells[n] || null;
+              const actEl = cell(1)?.querySelector('select') || cell(1)?.querySelector('input');
+              if (actEl?.tagName === 'SELECT') fillSelect(cell(1), p.action);
+              else fillInput(cell(1), p.action);
+              fillDate(cell(2), p.date);
+              fillInput(cell(3), p.location);
+              fillInput(cell(4), p.flight_no);
+              fillInput(cell(5), p.time);
+              fillInput(cell(6), p.description || '');
+
+              const ra = cell(1)?.querySelector('select, input')?.value || '';
+              const rf = cell(4)?.querySelector('input')?.value || '';
+              results.push({{ action: ra, flight: rf }});
+            }}
+
+            resolve({{
+              ok:true,
+              detail:'接送信息已填写',
+              pickup_count: pickups.length,
+              filled: results,
+            }});
+          }} catch (e) {{
+            resolve({{ ok:false, detail:e.message || String(e) }});
+          }}
+        }}, 500)))()''',
+        timeout=50,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "接送信息填写失败")
+    return Et818AutofillReport(
+        ok=True,
+        phase="pickup",
+        order_id=order_id,
+        order_no=order.get("order_no", "") or "",
+        token=payload.token,
+        add_url=payload.add_url,
+        pickup_count=result.get("pickup_count", pickup_count),
         detail=result.get("detail", ""),
     )
 

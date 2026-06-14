@@ -68,6 +68,8 @@
               <button class="btn" onclick="testEt818Prepare()">4. 打开ET818</button>
               <button class="btn" onclick="testEt818Template()">5. 选模板</button>
               <button class="btn" onclick="testEt818Main()">6. 填主信息</button>
+              <button class="btn" onclick="testEt818Travellers()">7. 填客人</button>
+              <button class="btn" onclick="testEt818Pickup()">8. 填接送</button>
               <button class="btn primary" onclick="runFullVbkEt818Test()">一键测试</button>
             </div>
           </div>
@@ -564,6 +566,58 @@
       return { orderId: templated.orderId, prepared: templated.prepared, template: templated.data, data };
     }
 
+    async function testEt818Travellers(orderId = null, mainDone = null) {
+      if (!mainDone) {
+        mainDone = await testEt818Main(orderId);
+        if (!mainDone) return null;
+      }
+      const token = mainDone.prepared?.token || mainDone.data?.token;
+      const resp = await fetch(`/api/orders/${mainDone.orderId}/et818-autofill/travellers`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token, add_url: mainDone.prepared?.add_url || mainDone.data?.add_url })
+      });
+      const data = await resp.json();
+      setJsonViewer('testStepResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">ET818 客人名单填写失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      const filledHtml = (data.filled || []).map(r => `<li>${esc(r.name || '')} ${esc(r.id_no || '')}</li>`).join('');
+      setTestSummary(`
+        <div class="test-summary-pass">ET818 客人名单已填写</div>
+        <div>客人数：<strong>${data.traveller_count || 0}</strong></div>
+        <ul>${filledHtml}</ul>
+      `);
+      return { orderId: mainDone.orderId, prepared: mainDone.prepared, template: mainDone.template, main: mainDone.data, data };
+    }
+
+    async function testEt818Pickup(orderId = null, travDone = null) {
+      if (!travDone) {
+        travDone = await testEt818Travellers(orderId);
+        if (!travDone) return null;
+      }
+      const token = travDone.prepared?.token || travDone.data?.token;
+      const resp = await fetch(`/api/orders/${travDone.orderId}/et818-autofill/pickup`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token, add_url: travDone.prepared?.add_url || travDone.data?.add_url })
+      });
+      const data = await resp.json();
+      setJsonViewer('testStepResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">ET818 接送填写失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      const filledHtml = (data.filled || []).map(r => `<li>${esc(r.action || '')} · ${esc(r.flight || '')}</li>`).join('');
+      setTestSummary(`
+        <div class="test-summary-pass">ET818 接送信息已填写</div>
+        <div>接送数：<strong>${data.pickup_count || 0}</strong></div>
+        <ul>${filledHtml}</ul>
+      `);
+      return { orderId: travDone.orderId, data };
+    }
+
     async function runFullVbkEt818Test() {
       const lookup = await testFindOrder();
       if (!lookup || !lookup.orderId) return;
@@ -575,7 +629,11 @@
       if (!prepared) return;
       const templated = await testEt818Template(lookup.orderId, prepared);
       if (!templated) return;
-      await testEt818Main(lookup.orderId, templated);
+      const mainDone = await testEt818Main(lookup.orderId, templated);
+      if (!mainDone) return;
+      const travDone = await testEt818Travellers(lookup.orderId, mainDone);
+      if (!travDone) return;
+      await testEt818Pickup(lookup.orderId, travDone);
     }
 
     function resetFilters() {

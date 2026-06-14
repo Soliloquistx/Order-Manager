@@ -8,8 +8,10 @@ from et818_bridge import Et818BridgeError
 from et818_service import (
     build_et818_payload_response,
     et818_autofill_main,
+    et818_autofill_pickup,
     et818_autofill_prepare,
     et818_autofill_template,
+    et818_autofill_travellers,
     find_et818_order_by_order_no,
     open_et818_detail_by_order_no,
     open_et818_detail_by_reg_id,
@@ -295,6 +297,30 @@ def api_et818_autofill_template(order_id: int, payload: Et818AutofillActionPaylo
 def api_et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload):
     try:
         return et818_autofill_main(order_id, payload).model_dump()
+    except HTTPException:
+        raise
+    except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/orders/{order_id}/et818-autofill/travellers")
+def api_et818_autofill_travellers(order_id: int, payload: Et818AutofillActionPayload):
+    try:
+        return et818_autofill_travellers(order_id, payload).model_dump()
+    except HTTPException:
+        raise
+    except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/orders/{order_id}/et818-autofill/pickup")
+def api_et818_autofill_pickup(order_id: int, payload: Et818AutofillActionPayload):
+    try:
+        return et818_autofill_pickup(order_id, payload).model_dump()
     except HTTPException:
         raise
     except Et818BridgeError as e:
