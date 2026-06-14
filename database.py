@@ -100,6 +100,66 @@ def init_db() -> None:
               FOREIGN KEY (created_by) REFERENCES users(id)
             );
 
+            CREATE TABLE IF NOT EXISTS order_travellers (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              order_id INTEGER NOT NULL,
+              name TEXT NOT NULL,
+              phone TEXT,
+              id_type TEXT,
+              id_no TEXT,
+              gender TEXT,
+              birth_date TEXT,
+              age INTEGER NOT NULL DEFAULT 0,
+              person_type TEXT NOT NULL DEFAULT '成人',
+              native_place TEXT,
+              note TEXT,
+              encrypted_info_revealed INTEGER NOT NULL DEFAULT 0,
+              from_vbk_detail INTEGER NOT NULL DEFAULT 0,
+              sort_index INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              FOREIGN KEY (order_id) REFERENCES orders(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS order_pickup_dropoff (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              order_id INTEGER NOT NULL,
+              action TEXT NOT NULL,
+              date TEXT,
+              location TEXT,
+              flight_no TEXT,
+              time_text TEXT,
+              description TEXT,
+              vehicle_company TEXT,
+              driver_name TEXT,
+              project_name TEXT,
+              enabled INTEGER NOT NULL DEFAULT 1,
+              sort_index INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              FOREIGN KEY (order_id) REFERENCES orders(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS vbk_detail_snapshots (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              order_no TEXT NOT NULL UNIQUE,
+              order_type_text TEXT,
+              confirm_status_text TEXT,
+              payment_status_text TEXT,
+              departure_date TEXT,
+              return_date TEXT,
+              departure_city TEXT,
+              customer_name TEXT,
+              customer_phone TEXT,
+              distribution_channel TEXT,
+              scenic_booking_no TEXT,
+              reservation_scenic_name TEXT,
+              merchant_note TEXT,
+              raw_json TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_orders_departure_date ON orders(departure_date);
             CREATE INDEX IF NOT EXISTS idx_orders_owner_id ON orders(owner_id);
             CREATE INDEX IF NOT EXISTS idx_orders_order_status ON orders(order_status);
@@ -110,6 +170,11 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_order_notes_created_at ON order_notes(created_at);
             CREATE INDEX IF NOT EXISTS idx_order_logs_order_id ON order_logs(order_id);
             CREATE INDEX IF NOT EXISTS idx_order_logs_created_at ON order_logs(created_at);
+            CREATE INDEX IF NOT EXISTS idx_order_travellers_order_id ON order_travellers(order_id);
+            CREATE INDEX IF NOT EXISTS idx_order_travellers_sort_index ON order_travellers(order_id, sort_index);
+            CREATE INDEX IF NOT EXISTS idx_order_pickup_dropoff_order_id ON order_pickup_dropoff(order_id);
+            CREATE INDEX IF NOT EXISTS idx_order_pickup_dropoff_sort_index ON order_pickup_dropoff(order_id, sort_index);
+            CREATE INDEX IF NOT EXISTS idx_vbk_detail_snapshots_order_no ON vbk_detail_snapshots(order_no);
             '''
         )
 

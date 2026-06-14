@@ -8,88 +8,76 @@
 </head>
 <body>
   <div class="workspace-page">
-    <header class="workspace-hero cardless">
-      <div>
-        <h1>订单工作台</h1>
-        <p>批量输入订单号，一键抓取，表格内维护负责人 / 路线 / 备注</p>
-      </div>
-      <div class="workspace-hero-actions">
-        <button class="btn" onclick="openOrderModal()">新增订单</button>
-        <button class="btn" onclick="openImportModal()">导入CSV</button>
-        <button class="btn" onclick="exportOrders()">导出</button>
-      </div>
-    </header>
-
-    <section class="workspace-card card">
-      <div class="panel-title">批量抓取</div>
-      <div class="bulk-grid">
-        <div class="bulk-entry">
-          <label>批量订单号</label>
-          <textarea id="batchOrderNos" rows="4" placeholder="支持一行一个、空格分隔、逗号分隔"></textarea>
+    <section class="workspace-board card">
+      <div class="board-topbar">
+        <div class="board-title-block">
+          <div class="board-title">订单工作台</div>
+          <div class="board-subtitle">先看表，再决定是筛选、本地维护，还是去做 VBK 补抓</div>
         </div>
-        <div class="bulk-actions">
-          <div class="inline-tools">
-            <input id="singleOrderLookup" type="text" class="toolbar-input" placeholder="单个订单号快速查询" />
-            <button class="btn primary" onclick="lookupSingleOrder()">查单</button>
+        <div class="board-topbar-actions">
+          <button class="btn" onclick="exportOrders()">导出</button>
+        </div>
+      </div>
+
+      <div class="workspace-filter-band">
+        <div class="toolbar-band-label">筛选</div>
+        <div class="filter-grid compact">
+          <input id="filterKeyword" placeholder="搜索订单号 / 客户 / 产品" />
+          <input id="filterChannel" placeholder="按渠道筛选" />
+          <select id="filterOrderStatus"></select>
+          <div class="inline-tools compact-actions left">
+            <button class="btn primary" onclick="loadOrders()">筛选</button>
+            <button class="btn" onclick="resetFilters()">重置</button>
           </div>
-          <div class="inline-tools">
-            <input id="vbkDepartureDate" type="date" class="toolbar-date" />
-            <select id="vbkListKind" class="toolbar-select">
-              <option value="order">普通订单</option>
-              <option value="hold">占位单</option>
-            </select>
-            <button class="btn" onclick="importVbkByDate()">按日期导入</button>
-          </div>
-          <div class="inline-tools compact-actions">
-            <button class="btn primary" onclick="batchFetchOrders()">批量抓取相关信息</button>
-            <button class="btn" onclick="clearBatchInput()">清空</button>
-          </div>
+        </div>
+      </div>
+
+      <div class="workspace-toolbar-band workspace-toolbar-secondary compact-row">
+        <div class="inline-tools fetch-bar">
+          <input id="singleOrderLookup" type="text" class="toolbar-input narrow" placeholder="订单号" />
+          <button class="btn primary" onclick="lookupSingleOrder()">查单</button>
+          <span class="sep"></span>
+          <input id="batchOrderNos" type="text" class="toolbar-input wide" placeholder="批量：一行一个 / 空格 / 逗号分隔" />
+          <button class="btn primary" onclick="batchFetchOrders()">批量抓取</button>
+          <button class="btn" onclick="clearBatchInput()">清空</button>
+          <span class="sep"></span>
+          <input id="vbkDepartureDate" type="date" class="toolbar-date" />
+          <select id="vbkListKind" class="toolbar-select">
+            <option value="order">普通</option>
+            <option value="hold">占位</option>
+          </select>
+          <button class="btn" onclick="importVbkByDate()">VBK导入</button>
         </div>
       </div>
       <div id="vbkImportResult" class="inline-result hidden"></div>
-    </section>
 
-    <section class="workspace-card card filter-card">
-      <div class="panel-title">筛选</div>
-      <div class="filter-grid">
-        <input id="filterKeyword" placeholder="搜索订单号 / 客户 / 产品" />
-        <input id="filterRouteName" placeholder="按路线筛选（手动字段）" />
-        <select id="filterOwnerId"></select>
-        <input id="filterChannel" placeholder="按渠道筛选" />
-        <select id="filterOrderStatus"></select>
-        <div class="inline-tools compact-actions left">
-          <button class="btn primary" onclick="loadOrders()">筛选</button>
-          <button class="btn" onclick="resetFilters()">重置</button>
+      <section class="table-shell">
+        <div class="table-toolbar table-toolbar-main">
+          <div>
+            <div class="table-summary" id="tableSummary">正在加载...</div>
+          </div>
         </div>
-      </div>
-    </section>
-
-    <section class="workspace-card card table-shell">
-      <div class="table-toolbar">
-        <div class="table-summary" id="tableSummary">正在加载...</div>
-      </div>
-      <div class="table-wrap">
-        <table class="workspace-table">
-          <thead>
-            <tr>
-              <th class="col-check"><input type="checkbox" id="checkAllRows" onclick="toggleCheckAll(this.checked)" /></th>
-              <th>订单号</th>
-              <th>客户</th>
-              <th>渠道</th>
-              <th>路线</th>
-              <th>产品/线路</th>
-              <th>出发日期</th>
-              <th>订单状态</th>
-              <th>支付状态</th>
-              <th>负责人</th>
-              <th>备注</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="orderTableBody"></tbody>
-        </table>
-        <div id="emptyState" class="empty" hidden>当前暂无订单数据</div>
-      </div>
+        <div class="table-wrap">
+          <table class="workspace-table">
+            <thead>
+              <tr>
+                <th class="col-check"><input type="checkbox" id="checkAllRows" onclick="toggleCheckAll(this.checked)" /></th>
+                <th>订单号</th>
+                <th>客户</th>
+                <th>渠道</th>
+                <th>产品/线路</th>
+                <th>出发日期</th>
+                <th>订单状态</th>
+                <th>支付状态</th>
+                <th>备注</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="orderTableBody"></tbody>
+          </table>
+          <div id="emptyState" class="empty" hidden>当前暂无订单数据</div>
+        </div>
+      </section>
     </section>
   </div>
 
@@ -153,6 +141,23 @@
     </div>
   </div>
 
+  <div id="et818Modal" class="modal hidden">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>→ ET818 录入</h2>
+        <button class="icon-btn" onclick="closeEt818Modal()">×</button>
+      </div>
+      <div class="field">
+        <label>按 ET818 录入顺序排列，复制后逐行粘贴</label>
+        <textarea id="et818Text" rows="12" readonly style="font-family:monospace;font-size:13px"></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn primary" onclick="copyEt818Text()">复制到剪贴板</button>
+        <button class="btn" onclick="closeEt818Modal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const STATUS_OPTIONS = {
       payment_status: ['', '未支付', '部分支付', '已支付', '已退款'],
@@ -172,7 +177,6 @@
       fillSelect('note_type', STATUS_OPTIONS.note_type, '记录类型');
       fillSelect('note_follow_status_after', STATUS_OPTIONS.follow_status, '不修改');
       fillSelect('filterOrderStatus', STATUS_OPTIONS.order_status, '全部状态');
-      fillOwnerFilter();
       buildOrderForm();
       await loadOrders();
     }
@@ -193,18 +197,10 @@
       });
     }
 
-    function fillOwnerFilter() {
-      const el = document.getElementById('filterOwnerId');
-      if (!el) return;
-      el.innerHTML = '<option value="">全部负责人</option>' + users.map(u => `<option value="${u.id}">${esc(u.display_name)}</option>`).join('');
-    }
-
     function collectFilters() {
       const params = new URLSearchParams();
       const mapping = {
         keyword: document.getElementById('filterKeyword').value.trim(),
-        route_name: document.getElementById('filterRouteName').value.trim(),
-        owner_id: document.getElementById('filterOwnerId').value.trim(),
         channel: document.getElementById('filterChannel').value.trim(),
         order_status: document.getElementById('filterOrderStatus').value.trim(),
       };
@@ -238,12 +234,10 @@
           <td class="mono">${esc(row.order_no || '')}</td>
           <td>${esc(row.customer_name || '')}</td>
           <td>${esc(row.channel || '')}</td>
-          <td>${renderEditableText(row, 'route_name', row.route_name || '', '请输入路线')}</td>
-          <td><div class="product-title">${esc(row.route_name || row.product_name || '')}</div><div class="subline">${esc(row.source_platform || '')}</div></td>
+          <td><div class="product-title">${esc(row.product_name || row.route_name || '')}</div><div class="subline">${esc(row.source_platform || '')}</div></td>
           <td>${esc(row.departure_date || '')}</td>
           <td>${badge(row.order_status || '', 'amber')}</td>
           <td>${badge(row.payment_status || '', 'blue')}</td>
-          <td>${renderOwnerSelect(row)}</td>
           <td>${renderEditableText(row, 'customer_note', row.customer_note || row.latest_note_summary || '', '点击填写备注', true)}</td>
           <td>
             <div class="row-actions">
@@ -261,13 +255,6 @@
       const cls = value ? 'editable-text filled' : 'editable-text empty';
       const display = value ? esc(value) : esc(placeholder);
       return `<div class="${cls} ${multiline ? 'multiline' : ''}" onclick="editInlineField(${row.id}, '${field}', ${JSON.stringify(value || '')}, ${JSON.stringify(placeholder)}, ${multiline})">${display}</div>`;
-    }
-
-    function renderOwnerSelect(row) {
-      return `<select class="inline-owner-select" onchange="saveWorkspaceField(${row.id}, 'owner_id', this.value ? Number(this.value) : null)">
-        <option value="">未分配</option>
-        ${users.map(u => `<option value="${u.id}" ${String(u.id)===String(row.owner_id || '') ? 'selected' : ''}>${esc(u.display_name)}</option>`).join('')}
-      </select>`;
     }
 
     function editInlineField(orderId, field, currentValue, placeholder, multiline = false) {
@@ -401,7 +388,7 @@
       currentOrderId = orderId;
       const resp = await fetch(`/api/orders/${orderId}`);
       const data = await resp.json();
-      document.getElementById('drawerTitle').textContent = data.order.product_name || data.order.route_name || '订单详情';
+      document.getElementById('drawerTitle').textContent = data.order.product_name || '订单详情';
       document.getElementById('drawerSubtitle').textContent = `订单号：${data.order.order_no}`;
       document.getElementById('editOrderBtn').onclick = () => openOrderModal(data.order);
       const notesHtml = data.notes.map(n => `
@@ -415,7 +402,6 @@
         <div class="drawer-section"><h3>核心信息</h3><div class="kv-grid">
           <div><label>订单号</label><span>${esc(data.order.order_no)}</span></div>
           <div><label>外部单号</label><span>${esc(data.order.external_order_no || '')}</span></div>
-          <div><label>线路</label><span>${esc(data.order.route_name || '')}</span></div>
           <div><label>产品名称</label><span>${esc(data.order.product_name || '')}</span></div>
           <div><label>客户</label><span>${esc(data.order.customer_name || '')}</span></div>
           <div><label>渠道</label><span>${esc(data.order.channel || '')}</span></div>
@@ -425,12 +411,12 @@
           <div><label>已付金额</label><span>${money(data.order.paid_amount)}</span></div>
           <div><label>支付状态</label><span>${esc(data.order.payment_status || '')}</span></div>
           <div><label>订单状态</label><span>${esc(data.order.order_status || '')}</span></div>
-          <div><label>负责人</label><span>${esc(data.order.owner_name || '')}</span></div>
           <div><label>备注</label><span>${esc(data.order.customer_note || data.order.latest_note_summary || '')}</span></div>
         </div></div>
         <div class="drawer-section">
           <div class="section-head"><h3>快捷操作</h3></div>
           <div class="et818-actions">
+            <button class="btn primary" onclick="openEt818Export(${data.order.id})">→ ET818</button>
             <button class="btn" onclick="openNoteModal(${data.order.id})">添加备注</button>
             <button class="btn" onclick="openPreview(${data.order.id})">预览页</button>
           </div>
@@ -444,10 +430,6 @@
     function closeDrawer() { document.getElementById('drawer').classList.add('hidden'); }
     function openPreview(orderId) { window.open(`/orders/${orderId}/preview`, '_blank'); }
 
-    function buildOwnerSelect(selectedId) {
-      return `<select name="owner_id">${users.map(u => `<option value="${u.id}" ${String(u.id)===String(selectedId || 1) ? 'selected' : ''}>${u.display_name}</option>`).join('')}</select>`;
-    }
-
     function buildOrderForm(order = null) {
       editingOrderId = order ? order.id : null;
       document.getElementById('orderModalTitle').textContent = editingOrderId ? '编辑订单' : '新增订单';
@@ -457,7 +439,6 @@
         ${field('订单号', `<input name="order_no" required value="${escAttr(order?.order_no || '')}" />`)}
         ${field('外部单号', `<input name="external_order_no" value="${escAttr(order?.external_order_no || '')}" />`)}
         ${field('产品名称', `<input name="product_name" required value="${escAttr(order?.product_name || '')}" />`)}
-        ${field('线路', `<input name="route_name" value="${escAttr(order?.route_name || '')}" />`)}
         ${field('渠道', selectHtml('channel', CHANNEL_OPTIONS.filter(Boolean), order?.channel || '携程'))}
         ${field('来源平台', `<input name="source_platform" value="${escAttr(order?.source_platform || '')}" />`)}
         ${field('客户姓名', `<input name="customer_name" required value="${escAttr(order?.customer_name || '')}" />`)}
@@ -473,7 +454,6 @@
         ${field('支付状态', selectHtml('payment_status', STATUS_OPTIONS.payment_status.filter(Boolean), order?.payment_status || '未支付'))}
         ${field('订单状态', selectHtml('order_status', STATUS_OPTIONS.order_status.filter(Boolean), order?.order_status || '待确认'))}
         ${field('跟进状态', selectHtml('follow_status', STATUS_OPTIONS.follow_status.filter(Boolean), order?.follow_status || '待跟进'))}
-        ${field('负责人', buildOwnerSelect(order?.owner_id || 1))}
         ${field('优先级', selectHtml('priority', STATUS_OPTIONS.priority, order?.priority || '普通'))}
         ${field('下次跟进时间', `<input name="next_follow_up_at" type="datetime-local" value="${toDatetimeLocal(order?.next_follow_up_at || '')}" />`)}
         <div class="field span-2"><label>客户备注</label><textarea name="customer_note" rows="3">${esc(order?.customer_note || '')}</textarea></div>
@@ -499,7 +479,7 @@
       event.preventDefault();
       const formData = new FormData(event.target);
       const payload = Object.fromEntries(formData.entries());
-      ['adult_count','child_count','room_count','owner_id'].forEach(k => { if (payload[k] !== '') payload[k] = Number(payload[k]); });
+      ['adult_count','child_count','room_count'].forEach(k => { if (payload[k] !== '') payload[k] = Number(payload[k]); });
       ['total_amount','paid_amount'].forEach(k => { if (payload[k] !== '') payload[k] = Number(payload[k]); else payload[k] = null; });
       const method = editingOrderId ? 'PUT' : 'POST';
       const url = editingOrderId ? `/api/orders/${editingOrderId}` : '/api/orders';
@@ -559,6 +539,25 @@
     function esc(text) { return String(text ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
     function escAttr(text) { return esc(text); }
     function toDatetimeLocal(v) { return v ? String(v).replace(' ', 'T').slice(0,16) : ''; }
+
+    async function openEt818Export(orderId) {
+      const resp = await fetch(`/api/orders/${orderId}/et818-format`);
+      const data = await resp.json();
+      if (!resp.ok) { alert(data.detail || '获取失败'); return; }
+      document.getElementById('et818Text').value = data.text;
+      document.getElementById('et818Modal').classList.remove('hidden');
+    }
+
+    function closeEt818Modal() {
+      document.getElementById('et818Modal').classList.add('hidden');
+    }
+
+    function copyEt818Text() {
+      const ta = document.getElementById('et818Text');
+      ta.select();
+      document.execCommand('copy');
+      alert('已复制到剪贴板，可在 ET818 新增表单中逐行粘贴');
+    }
 
     init();
   </script>

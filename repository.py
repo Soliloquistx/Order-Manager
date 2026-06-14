@@ -390,3 +390,168 @@ def import_orders_csv_text(csv_text: str, default_owner_id: int = 1) -> dict[str
         except Exception as e:
             failed.append({"line": line_no, "error": str(e), "order_no": row.get("订单号", "")})
     return {"success": success, "failed": failed, "total": success + len(failed)}
+
+
+def list_order_travellers(order_id: int) -> list[dict[str, Any]]:
+    with db_cursor() as conn:
+        rows = conn.execute(
+            '''
+            SELECT *
+            FROM order_travellers
+            WHERE order_id = ?
+            ORDER BY sort_index ASC, id ASC
+            ''',
+            (order_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+
+def replace_order_travellers(order_id: int, items: list[dict[str, Any]]) -> None:
+    now = utc_now_str()
+    with db_cursor() as conn:
+        conn.execute("DELETE FROM order_travellers WHERE order_id = ?", (order_id,))
+        for idx, item in enumerate(items):
+            conn.execute(
+                '''
+                INSERT INTO order_travellers (
+                  order_id, name, phone, id_type, id_no, gender, birth_date, age,
+                  person_type, native_place, note, encrypted_info_revealed,
+                  from_vbk_detail, sort_index, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    order_id,
+                    (item.get("name") or "").strip(),
+                    (item.get("phone") or "").strip() or None,
+                    (item.get("id_type") or "").strip() or None,
+                    (item.get("id_no") or "").strip() or None,
+                    (item.get("gender") or "").strip() or None,
+                    (item.get("birth_date") or "").strip() or None,
+                    int(item.get("age") or 0),
+                    (item.get("person_type") or "成人").strip() or "成人",
+                    (item.get("native_place") or "").strip() or None,
+                    (item.get("note") or "").strip() or None,
+                    1 if item.get("encrypted_info_revealed") else 0,
+                    1 if item.get("from_vbk_detail") else 0,
+                    int(item.get("sort_index", idx) or idx),
+                    now,
+                    now,
+                ),
+            )
+
+
+
+def list_order_pickup_dropoff(order_id: int) -> list[dict[str, Any]]:
+    with db_cursor() as conn:
+        rows = conn.execute(
+            '''
+            SELECT *
+            FROM order_pickup_dropoff
+            WHERE order_id = ?
+            ORDER BY sort_index ASC, id ASC
+            ''',
+            (order_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+
+def replace_order_pickup_dropoff(order_id: int, items: list[dict[str, Any]]) -> None:
+    now = utc_now_str()
+    with db_cursor() as conn:
+        conn.execute("DELETE FROM order_pickup_dropoff WHERE order_id = ?", (order_id,))
+        for idx, item in enumerate(items):
+            conn.execute(
+                '''
+                INSERT INTO order_pickup_dropoff (
+                  order_id, action, date, location, flight_no, time_text, description,
+                  vehicle_company, driver_name, project_name, enabled, sort_index,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    order_id,
+                    (item.get("action") or "").strip(),
+                    (item.get("date") or "").strip() or None,
+                    (item.get("location") or "").strip() or None,
+                    (item.get("flight_no") or "").strip() or None,
+                    (item.get("time") or item.get("time_text") or "").strip() or None,
+                    (item.get("description") or "").strip() or None,
+                    (item.get("vehicle_company") or "").strip() or None,
+                    (item.get("driver_name") or "").strip() or None,
+                    (item.get("project_name") or "").strip() or None,
+                    1 if item.get("enabled", True) else 0,
+                    int(item.get("sort_index", idx) or idx),
+                    now,
+                    now,
+                ),
+            )
+
+
+
+def get_vbk_detail_snapshot(order_no: str) -> dict[str, Any] | None:
+    with db_cursor() as conn:
+        row = conn.execute(
+            '''
+            SELECT *
+            FROM vbk_detail_snapshots
+            WHERE order_no = ?
+            ''',
+            (order_no,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+
+def upsert_vbk_detail_snapshot(order_no: str, data: dict[str, Any]) -> None:
+    now = utc_now_str()
+    with db_cursor() as conn:
+        existing = conn.execute(
+            "SELECT id FROM vbk_detail_snapshots WHERE order_no = ?",
+            (order_no,),
+        ).fetchone()
+        payload = (
+            order_no,
+            (data.get("order_type_text") or "").strip() or None,
+            (data.get("confirm_status_text") or "").strip() or None,
+            (data.get("payment_status_text") or "").strip() or None,
+            (data.get("departure_date") or "").strip() or None,
+            (data.get("return_date") or "").strip() or None,
+            (data.get("departure_city") or "").strip() or None,
+            (data.get("customer_name") or "").strip() or None,
+            (data.get("customer_phone") or "").strip() or None,
+            (data.get("distribution_channel") or "").strip() or None,
+            (data.get("scenic_booking_no") or "").strip() or None,
+            (data.get("reservation_scenic_name") or "").strip() or None,
+            (data.get("merchant_note") or "").strip() or None,
+            data.get("raw_json") or None,
+        )
+        if existing:
+            conn.execute(
+                '''
+                UPDATE vbk_detail_snapshots SET
+                  order_type_text=?, confirm_status_text=?, payment_status_text=?,
+                  departure_date=?, return_date=?, departure_city=?, customer_name=?,
+                  customer_phone=?, distribution_channel=?, scenic_booking_no=?,
+                  reservation_scenic_name=?, merchant_note=?, raw_json=?, updated_at=?
+                WHERE order_no=?
+                ''',
+                (
+                    payload[1], payload[2], payload[3], payload[4], payload[5], payload[6],
+                    payload[7], payload[8], payload[9], payload[10], payload[11], payload[12],
+                    payload[13], now, order_no,
+                ),
+            )
+        else:
+            conn.execute(
+                '''
+                INSERT INTO vbk_detail_snapshots (
+                  order_no, order_type_text, confirm_status_text, payment_status_text,
+                  departure_date, return_date, departure_city, customer_name,
+                  customer_phone, distribution_channel, scenic_booking_no,
+                  reservation_scenic_name, merchant_note, raw_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                payload + (now, now),
+            )
