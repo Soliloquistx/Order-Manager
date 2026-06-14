@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 
@@ -17,6 +18,9 @@ from repository import (
 )
 from schemas import (
     DateParts,
+    Et818AutofillActionPayload,
+    Et818AutofillReport,
+    Et818AutofillTarget,
     Et818Payload,
     Et818PayloadResponse,
     MetaBlock,
@@ -77,6 +81,272 @@ def open_et818_detail_by_order_no(order_no: str) -> dict:
         plan_id=match.get("plan_id") or 0,
     )
     return {"ok": True, "match": match, "detail_url": detail_url}
+
+
+def prepare_et818_add_page(order_id: int) -> Et818AutofillTarget:
+    order = get_order_or_raise(order_id)
+    token = f"of{int(datetime.now().timestamp() * 1000)}"
+    add_url = f"/XWJ/PlanReg/AddDSN/PlanMng.ListRegDSN1?time={token}&PageType=add&RegID=0&BizMode=15&FixedPlanClass="
+    escaped_url = json.dumps(add_url, ensure_ascii=False)
+    escaped_title = json.dumps(f"ET818自动填表-{order.get('order_no', '')}", ensure_ascii=False)
+    result = bridge.eval(
+        f'''(() => {{
+          try {{
+            const url = {escaped_url};
+            const title = {escaped_title};
+            if (window.layui && layui.index && typeof layui.index.openTabsPage === 'function') {{
+              layui.index.openTabsPage(url, title);
+            }} else {{
+              const body = document.querySelector('#LAY_app_body') || document.body;
+              const iframe = document.createElement('iframe');
+              iframe.src = url;
+              iframe.className = 'layadmin-iframe';
+              iframe.style.width = '100%';
+              iframe.style.height = '100vh';
+              body.appendChild(iframe);
+            }}
+            return {{ ok: true, url }};
+          }} catch (e) {{
+            return {{ ok: false, detail: e.message || String(e) }};
+          }}
+        }})()''',
+        timeout=20,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "打开 ET818 新增页失败")
+    return Et818AutofillTarget(token=token, add_url=add_url)
+
+
+def et818_autofill_prepare(order_id: int) -> Et818AutofillReport:
+    order = get_order_or_raise(order_id)
+    target = prepare_et818_add_page(order_id)
+    result = bridge.eval(
+        f'''(() => new Promise(resolve => setTimeout(() => {{
+          try {{
+            const token = {json.dumps(target.token, ensure_ascii=False)};
+            const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
+            if (!frame) return resolve({{ ok:false, detail:'未找到新增页 iframe' }});
+            const doc = frame.contentDocument;
+            const mainTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('订单电话/姓名') && (t.innerText || '').includes('订单号'));
+            resolve({{ ok:true, page_ready: !!(doc && doc.body && mainTable), detail: mainTable ? '新增页已就绪' : '主表未就绪', table_count: [...doc.querySelectorAll('table')].length, body_preview: (doc.body?.innerText || '').slice(0, 2000) }});
+          }} catch (e) {{
+            resolve({{ ok:false, detail:e.message || String(e) }});
+          }}
+        }}, 5000)))()''',
+        timeout=50,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "ET818 新增页未就绪")
+    return Et818AutofillReport(
+        ok=True,
+        phase="prepare",
+        order_id=order_id,
+        order_no=order.get("order_no", "") or "",
+        token=target.token,
+        add_url=target.add_url,
+        page_ready=bool(result.get("page_ready")),
+        detail=result.get("detail", ""),
+    )
+
+
+def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) -> Et818AutofillReport:
+    order = get_order_or_raise(order_id)
+    payload_response = build_et818_payload_response(order_id)
+    template_selection = payload_response.et818_payload.template_selection
+    keyword = template_selection.template_keyword or template_selection.template_name
+    final_name = template_selection.template_name or keyword
+    result = bridge.eval(
+        f'''(() => new Promise(resolve => setTimeout(() => {{
+          try {{
+            const token = {json.dumps(payload.token, ensure_ascii=False)};
+            const keyword = {json.dumps(keyword, ensure_ascii=False)};
+            const finalName = {json.dumps(final_name, ensure_ascii=False)};
+            const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
+            if (!frame || !frame.contentDocument) return resolve({{ ok:false, detail:'未找到模板页 iframe' }});
+            const doc = frame.contentDocument;
+            const mainTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('线路模板') && (t.innerText || '').includes('订单号'));
+            if (!mainTable) return resolve({{ ok:false, detail:'未找到主表' }});
+            let valueCell = null;
+            for (const row of [...mainTable.rows]) {{
+              for (let i = 0; i < row.cells.length; i += 1) {{
+                if ((row.cells[i].innerText || '').trim() === '线路模板:') {{
+                  valueCell = row.cells[i + 1] || null;
+                }}
+              }}
+            }}
+            const input = valueCell ? valueCell.querySelector('input') : null;
+            if (!input) return resolve({{ ok:false, detail:'未找到线路模板输入框' }});
+            const proto = HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            input.focus();
+            if (setter) setter.call(input, ''); else input.value = '';
+            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            if (setter) setter.call(input, keyword); else input.value = keyword;
+            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'a', bubbles: true }}));
+            input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'a', bubbles: true }}));
+            setTimeout(() => {{
+              const items = [...doc.querySelectorAll('.dropdown-item')];
+              let item = items.find(el => (el.innerText || el.textContent || '').trim() === finalName);
+              if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(finalName));
+              if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(keyword));
+              if (!item) return resolve({{ ok:false, detail:'未出现匹配的线路模板候选', candidates: items.map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).slice(0,20) }});
+              item.click();
+              resolve({{ ok:true, detail:'线路模板已选中', template_name: finalName, input_value: input.value || '' }});
+            }}, 1200);
+          }} catch (e) {{
+            resolve({{ ok:false, detail:e.message || String(e) }});
+          }}
+        }}, 200)))()''',
+        timeout=40,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "线路模板选择失败")
+    return Et818AutofillReport(
+        ok=True,
+        phase="template",
+        order_id=order_id,
+        order_no=order.get("order_no", "") or "",
+        token=payload.token,
+        add_url=payload.add_url,
+        template_name=result.get("template_name", final_name),
+        detail=result.get("detail", ""),
+    )
+
+
+def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> Et818AutofillReport:
+    order = get_order_or_raise(order_id)
+    payload_response = build_et818_payload_response(order_id)
+    et = payload_response.et818_payload
+    order_info = et.order_info
+
+    result = bridge.eval(
+        f'''(() => new Promise(resolve => setTimeout(() => {{
+          try {{
+            const token = {json.dumps(payload.token, ensure_ascii=False)};
+            const data = {json.dumps({
+                'contact_name': order_info.contact_name,
+                'departure_date': order_info.departure_date.model_dump(),
+                'return_date': order_info.return_date.model_dump(),
+                'transport_name': order_info.transport_name,
+                'order_no': order_info.order_no,
+                'team_category': order_info.team_category,
+                'adult_count': order_info.adult_count,
+                'child_count': order_info.child_count,
+                'room_need': order_info.room_need.model_dump(),
+            }, ensure_ascii=False)};
+            const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
+            if (!frame || !frame.contentDocument) return resolve({{ ok:false, detail:'未找到主信息页 iframe' }});
+            const doc = frame.contentDocument;
+            const mainTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('订单电话/姓名') && (t.innerText || '').includes('团队类别'));
+            if (!mainTable) return resolve({{ ok:false, detail:'未找到订单信息主表' }});
+
+            const proto = HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            const setValue = (el, value) => {{
+              if (!el) return;
+              const v = value == null ? '' : String(value);
+              if (setter) setter.call(el, v); else el.value = v;
+              el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+              el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+              el.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+            }};
+            const getValueCellByLabel = (label) => {{
+              for (const row of [...mainTable.rows]) {{
+                for (let i = 0; i < row.cells.length; i += 1) {{
+                  if ((row.cells[i].innerText || '').trim() === label) return row.cells[i + 1] || null;
+                }}
+              }}
+              return null;
+            }};
+            const setDateCell = (cell, parts) => {{
+              if (!cell || !parts) return;
+              const inputs = [...cell.querySelectorAll('input')];
+              if (inputs[0]) setValue(inputs[0], parts.year || '');
+              if (inputs[1]) setValue(inputs[1], parts.month || '');
+              if (inputs[2]) setValue(inputs[2], parts.day || '');
+            }};
+            const pickDropdown = (cell, finalText) => {{
+              if (!cell || !finalText) return false;
+              const input = cell.querySelector('input');
+              if (!input) return false;
+              input.focus();
+              setValue(input, finalText);
+              input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'a', bubbles: true }}));
+              input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'a', bubbles: true }}));
+              const items = [...doc.querySelectorAll('.dropdown-item')];
+              let item = items.find(el => (el.innerText || el.textContent || '').trim() === finalText);
+              if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(finalText));
+              if (item) {{ item.click(); return true; }}
+              return false;
+            }};
+
+            setValue(getValueCellByLabel('订单电话/姓名:')?.querySelector('input'), data.contact_name);
+            setDateCell(getValueCellByLabel('出团日期:'), data.departure_date);
+            setDateCell(getValueCellByLabel('返程日期:'), data.return_date);
+            setValue(getValueCellByLabel('订单号:')?.querySelector('input'), data.order_no);
+
+            const transportOk = pickDropdown(getValueCellByLabel('大交通: *'), data.transport_name);
+            const teamOk = pickDropdown(getValueCellByLabel('团队类别:'), data.team_category);
+
+            const peopleCell = getValueCellByLabel('参团人数: *');
+            const peopleInputs = peopleCell ? [...peopleCell.querySelectorAll('input')] : [];
+            if (peopleInputs[0]) setValue(peopleInputs[0], data.adult_count);
+            if (peopleInputs[1]) setValue(peopleInputs[1], data.child_count);
+
+            const roomCell = getValueCellByLabel('用房: *');
+            const roomInputs = roomCell ? [...roomCell.querySelectorAll('input')] : [];
+            if (roomInputs[0]) setValue(roomInputs[0], data.room_need.standard);
+            if (roomInputs[1]) setValue(roomInputs[1], data.room_need.big_bed);
+            if (roomInputs[2]) setValue(roomInputs[2], data.room_need.triple);
+            if (roomInputs[3]) setValue(roomInputs[3], data.room_need.single_female);
+            if (roomInputs[4]) setValue(roomInputs[4], data.room_need.single_male);
+            if (roomInputs[5]) setValue(roomInputs[5], data.room_need.nights);
+
+            const readDate = (cell) => {{
+              const inputs = cell ? [...cell.querySelectorAll('input')] : [];
+              return [inputs[0]?.value || '', inputs[1]?.value || '', inputs[2]?.value || ''];
+            }};
+            const requiredMain = [
+              {{ label:'订单电话/姓名', value:getValueCellByLabel('订单电话/姓名:')?.querySelector('input')?.value || '' }},
+              {{ label:'出团日期', value:readDate(getValueCellByLabel('出团日期:')).join('-') }},
+              {{ label:'返程日期', value:readDate(getValueCellByLabel('返程日期:')).join('-') }},
+              {{ label:'大交通', value:getValueCellByLabel('大交通: *')?.querySelector('input')?.value || '' }},
+              {{ label:'订单号', value:getValueCellByLabel('订单号:')?.querySelector('input')?.value || '' }},
+              {{ label:'团队类别', value:getValueCellByLabel('团队类别:')?.querySelector('input')?.value || '' }},
+              {{ label:'参团人数', value:peopleInputs.map(x => x.value || '').join('/') }},
+              {{ label:'用房', value:roomInputs.map(x => x.value || '').join('/') }},
+            ];
+
+            resolve({{
+              ok:true,
+              detail:'主信息已填写',
+              transport_name:data.transport_name,
+              team_category:data.team_category,
+              required_main: requiredMain,
+              transport_selected: transportOk,
+              team_selected: teamOk,
+            }});
+          }} catch (e) {{
+            resolve({{ ok:false, detail:e.message || String(e) }});
+          }}
+        }}, 400)))()''',
+        timeout=50,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "主信息填写失败")
+    return Et818AutofillReport(
+        ok=True,
+        phase="main",
+        order_id=order_id,
+        order_no=order.get("order_no", "") or "",
+        token=payload.token,
+        add_url=payload.add_url,
+        transport_name=result.get("transport_name", order_info.transport_name),
+        team_category=result.get("team_category", order_info.team_category),
+        required_main=result.get("required_main", []),
+        detail=result.get("detail", ""),
+    )
 
 
 def build_et818_payload_response(order_id: int) -> Et818PayloadResponse:
@@ -176,10 +446,14 @@ def build_template_selection(bundle: dict[str, Any]) -> TemplateSelection:
     )
 
     confidence = float(match.get("match_confidence", 0.0) or 0.0)
+    template_keyword = (match.get("template_keyword", "") or "").strip()
+    if not template_keyword:
+        source = supplier_name or product_name
+        template_keyword = source[:4] if source else ""
 
     return TemplateSelection(
         template_name=match.get("template_name", "") or "",
-        template_keyword=match.get("template_keyword", "") or "",
+        template_keyword=template_keyword,
         match_confidence=confidence,
         match_basis=TemplateMatchBasis(
             supplier_product_name=supplier_name,
@@ -400,31 +674,32 @@ def match_et818_template(
     channel: str,
 ) -> dict[str, Any]:
     text = f"{supplier_product_name} {product_name}".strip()
+    supplier_prefix = (supplier_product_name or "").strip()[:4]
 
     if "甘南" in text and "莲宝" in text and "7" in text and "自营" in text:
         return {
             "template_name": "甘南莲宝7天[携程自营]",
-            "template_keyword": "甘南莲宝7天",
+            "template_keyword": supplier_prefix or "甘南",
             "match_confidence": 0.93,
         }
 
     if "甘南" in text and "莲宝" in text and "7" in text:
         return {
             "template_name": "甘南莲宝7天",
-            "template_keyword": "甘南莲宝7天",
+            "template_keyword": supplier_prefix or "甘南",
             "match_confidence": 0.85,
         }
 
     if "甘南" in text and "莲宝" in text and "5" in text:
         return {
             "template_name": "甘南莲宝5日",
-            "template_keyword": "甘南莲宝5日",
+            "template_keyword": supplier_prefix or "甘南",
             "match_confidence": 0.85,
         }
 
     return {
         "template_name": "",
-        "template_keyword": product_name[:12] if product_name else supplier_product_name[:12],
+        "template_keyword": supplier_prefix or (product_name[:4] if product_name else ""),
         "match_confidence": 0.3,
     }
 

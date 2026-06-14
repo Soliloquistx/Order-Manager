@@ -41,8 +41,8 @@
           <button class="btn primary" onclick="batchFetchOrders()">批量抓取</button>
           <button class="btn" onclick="clearBatchInput()">清空</button>
           <span class="sep"></span>
-          <input id="vbkDepartureDate" type="date" class="toolbar-date" />
-          <select id="vbkListKind" class="toolbar-select">
+          <input id="vbkDepartureDate" type="date" class="toolbar-date" disabled />
+          <select id="vbkListKind" class="toolbar-select" disabled>
             <option value="order">普通</option>
             <option value="hold">占位</option>
           </select>
@@ -50,6 +50,43 @@
         </div>
       </div>
       <div id="vbkImportResult" class="inline-result hidden"></div>
+
+      <section class="workspace-test-panel">
+        <div class="test-panel-header">
+          <div>
+            <div class="panel-title">VBK → ET818 测试面板</div>
+            <div class="board-subtitle">输入订单号，直接看查单、本地详情同步、ET818 payload 结果</div>
+          </div>
+        </div>
+        <div class="test-panel-grid">
+          <div class="test-panel-controls">
+            <input id="testOrderNo" type="text" class="toolbar-input wide" placeholder="输入订单号，例如 1128146456209699" />
+            <div class="inline-tools">
+              <button class="btn" onclick="testFindOrder()">1. 查单入库</button>
+              <button class="btn" onclick="testSyncDetail()">2. 抓VBK详情</button>
+              <button class="btn" onclick="testBuildPayload()">3. 生成Payload</button>
+              <button class="btn" onclick="testEt818Prepare()">4. 打开ET818</button>
+              <button class="btn" onclick="testEt818Template()">5. 选模板</button>
+              <button class="btn" onclick="testEt818Main()">6. 填主信息</button>
+              <button class="btn primary" onclick="runFullVbkEt818Test()">一键测试</button>
+            </div>
+          </div>
+          <div id="testResultSummary" class="test-summary-card">
+            <div class="test-summary-title">测试摘要</div>
+            <div class="test-summary-empty">尚未开始测试</div>
+          </div>
+        </div>
+        <div class="test-panel-results">
+          <div class="test-result-block">
+            <div class="test-result-label">查单 / 同步结果</div>
+            <pre id="testStepResult" class="json-viewer">{}</pre>
+          </div>
+          <div class="test-result-block">
+            <div class="test-result-label">ET818 Payload</div>
+            <pre id="testPayloadResult" class="json-viewer">{}</pre>
+          </div>
+        </div>
+      </section>
 
       <section class="table-shell">
         <div class="table-toolbar table-toolbar-main">
@@ -242,7 +279,7 @@
           <td>
             <div class="row-actions">
               <button class="link-btn" onclick="openDrawer(${row.id})">详情</button>
-              <button class="link-btn" onclick="openPreview(${row.id})">预览</button>
+              <button class="link-btn disabled" title="预览功能今晚未接通">预览</button>
               <button class="link-btn" onclick="refreshOne('${escAttr(row.order_no || '')}')">重抓</button>
             </div>
           </td>
@@ -315,7 +352,7 @@
       });
       const data = await resp.json();
       if (!resp.ok) {
-        setInlineResult('vbkImportResult', `批量抓取失败：${esc(data.detail || '未知错误')}`, 'error');
+        setInlineResult('vbkImportResult', `当前批量抓取接口尚未启用，请先使用下方“VBK → ET818 测试面板”或单个订单号测试。错误：${esc(data.detail || '未知错误')}`, 'error');
         return;
       }
       const items = (data.items || []).map(item => `<li>${esc(item.order_no)} · ${esc(item.source || '')}${item.order ? ` · ${esc(item.order.customer_name || '')}` : ''}${item.detail ? ` · ${esc(item.detail)}` : ''}</li>`).join('');
@@ -345,30 +382,200 @@
     }
 
     async function importVbkByDate() {
-      const departureDate = (document.getElementById('vbkDepartureDate').value || '').trim();
-      const listKind = (document.getElementById('vbkListKind').value || 'order').trim();
-      if (!departureDate) {
-        setInlineResult('vbkImportResult', '请选择预定日期', 'error');
-        return;
-      }
-      setInlineResult('vbkImportResult', `正在按日期导入 ${esc(departureDate)} ...`, 'ok');
-      const resp = await fetch('/api/vbk/import-by-date', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ departure_date: departureDate, list_kind: listKind })
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        setInlineResult('vbkImportResult', `导入失败：${esc(data.detail || '未知错误')}`, 'error');
-        return;
-      }
-      setInlineResult('vbkImportResult', `导入完成：命中 ${data.matched} 条，新增 ${data.created} 条，更新 ${data.updated} 条`, 'ok');
-      await loadOrders();
+      setInlineResult('vbkImportResult', '当前“按日期导入 VBK”功能今晚暂未接通，请先使用“VBK → ET818 测试面板”按订单号测试。', 'error');
+      return;
     }
 
     function clearBatchInput() {
       document.getElementById('batchOrderNos').value = '';
       document.getElementById('singleOrderLookup').value = '';
+    }
+
+    function getTestOrderNo() {
+      return (document.getElementById('testOrderNo').value || '').trim();
+    }
+
+    function setJsonViewer(id, data) {
+      document.getElementById(id).textContent = JSON.stringify(data, null, 2);
+    }
+
+    function setTestSummary(html) {
+      document.getElementById('testResultSummary').innerHTML = `<div class="test-summary-title">测试摘要</div>${html}`;
+    }
+
+    async function testFindOrder() {
+      const orderNo = getTestOrderNo();
+      if (!orderNo) {
+        alert('请先输入订单号');
+        return null;
+      }
+      const resp = await fetch('/api/vbk/find-by-order-no', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
+      });
+      const data = await resp.json();
+      setJsonViewer('testStepResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">查单失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      const orderId = data.order?.id || null;
+      setTestSummary(`
+        <div class="test-summary-pass">查单成功</div>
+        <div>order_id：<strong>${esc(orderId || '')}</strong></div>
+        <div>matched_list_kind：${esc(data.matched_list_kind || '')}</div>
+        <div>来源：${esc(data.source || '')}</div>
+      `);
+      await loadOrders();
+      return { orderId, data };
+    }
+
+    async function testSyncDetail(orderId = null, orderNo = null) {
+      orderNo = orderNo || getTestOrderNo();
+      if (!orderNo) {
+        alert('请先输入订单号');
+        return null;
+      }
+      if (!orderId) {
+        const lookup = await testFindOrder();
+        if (!lookup || !lookup.orderId) return null;
+        orderId = lookup.orderId;
+      }
+      const resp = await fetch(`/api/orders/${orderId}/sync-vbk-detail-from-browser`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
+      });
+      const data = await resp.json();
+      setJsonViewer('testStepResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">抓VBK详情失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      const result = data.sync_result || {};
+      setTestSummary(`
+        <div class="test-summary-pass">详情同步成功</div>
+        <div>order_id：<strong>${esc(orderId)}</strong></div>
+        <div>旅客数：<strong>${esc(result.traveller_count ?? 0)}</strong></div>
+        <div>接送数：<strong>${esc(result.pickup_dropoff_count ?? 0)}</strong></div>
+        <div>snapshot_updated：${result.snapshot_updated ? 'true' : 'false'}</div>
+      `);
+      return { orderId, data };
+    }
+
+    async function testBuildPayload(orderId = null) {
+      if (!orderId) {
+        const orderNo = getTestOrderNo();
+        if (!orderNo) {
+          alert('请先输入订单号');
+          return null;
+        }
+        const lookup = await testFindOrder();
+        if (!lookup || !lookup.orderId) return null;
+        orderId = lookup.orderId;
+      }
+      const resp = await fetch(`/api/orders/${orderId}/et818-payload`);
+      const data = await resp.json();
+      setJsonViewer('testPayloadResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">生成 ET818 Payload 失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      const payload = data.et818_payload || {};
+      setTestSummary(`
+        <div class="test-summary-pass">Payload 生成成功</div>
+        <div>模板：<strong>${esc(payload.template_selection?.template_name || '')}</strong></div>
+        <div>旅客数：<strong>${esc((payload.travellers || []).length)}</strong></div>
+        <div>接送数：<strong>${esc((payload.pickup_dropoff || []).length)}</strong></div>
+        <div>warnings：${esc((payload.meta?.warnings || []).join('；') || '无')}</div>
+      `);
+      return { orderId, data };
+    }
+
+    async function testEt818Prepare(orderId = null) {
+      if (!orderId) {
+        const lookup = await testFindOrder();
+        if (!lookup || !lookup.orderId) return null;
+        orderId = lookup.orderId;
+      }
+      const resp = await fetch(`/api/orders/${orderId}/et818-autofill/prepare`, { method: 'POST' });
+      const data = await resp.json();
+      setJsonViewer('testStepResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">打开 ET818 失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      setTestSummary(`
+        <div class="test-summary-pass">ET818 新增页已打开</div>
+        <div>page_ready：<strong>${data.page_ready ? 'true' : 'false'}</strong></div>
+        <div>token：<strong>${esc(data.token || '')}</strong></div>
+      `);
+      return { orderId, data };
+    }
+
+    async function testEt818Template(orderId = null, prepared = null) {
+      if (!prepared) {
+        prepared = await testEt818Prepare(orderId);
+        if (!prepared) return null;
+      }
+      const resp = await fetch(`/api/orders/${prepared.orderId}/et818-autofill/template`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token: prepared.data.token, add_url: prepared.data.add_url })
+      });
+      const data = await resp.json();
+      setJsonViewer('testStepResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">ET818 模板选择失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      setTestSummary(`
+        <div class="test-summary-pass">ET818 模板已选中</div>
+        <div>模板：<strong>${esc(data.template_name || '')}</strong></div>
+        <div>phase：<strong>${esc(data.phase || '')}</strong></div>
+      `);
+      return { orderId: prepared.orderId, prepared: prepared.data, data };
+    }
+
+    async function testEt818Main(orderId = null, templated = null) {
+      if (!templated) {
+        templated = await testEt818Template(orderId);
+        if (!templated) return null;
+      }
+      const resp = await fetch(`/api/orders/${templated.orderId}/et818-autofill/main`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token: templated.prepared?.token || templated.data?.token, add_url: templated.prepared?.add_url || templated.data?.add_url })
+      });
+      const data = await resp.json();
+      setJsonViewer('testStepResult', data);
+      if (!resp.ok) {
+        setTestSummary(`<div class="test-summary-fail">ET818 主信息填写失败：${esc(data.detail || '未知错误')}</div>`);
+        return null;
+      }
+      const rows = (data.required_main || []).map(x => `<li>${esc(x.label)}：${esc(x.value || '')}</li>`).join('');
+      setTestSummary(`
+        <div class="test-summary-pass">ET818 主信息已填写</div>
+        <div>大交通：<strong>${esc(data.transport_name || '')}</strong></div>
+        <div>团队类别：<strong>${esc(data.team_category || '')}</strong></div>
+        <ul>${rows}</ul>
+      `);
+      return { orderId: templated.orderId, prepared: templated.prepared, template: templated.data, data };
+    }
+
+    async function runFullVbkEt818Test() {
+      const lookup = await testFindOrder();
+      if (!lookup || !lookup.orderId) return;
+      const sync = await testSyncDetail(lookup.orderId, getTestOrderNo());
+      if (!sync) return;
+      const payload = await testBuildPayload(lookup.orderId);
+      if (!payload) return;
+      const prepared = await testEt818Prepare(lookup.orderId);
+      if (!prepared) return;
+      const templated = await testEt818Template(lookup.orderId, prepared);
+      if (!templated) return;
+      await testEt818Main(lookup.orderId, templated);
     }
 
     function resetFilters() {
@@ -416,9 +623,8 @@
         <div class="drawer-section">
           <div class="section-head"><h3>快捷操作</h3></div>
           <div class="et818-actions">
-            <button class="btn primary" onclick="openEt818Export(${data.order.id})">→ ET818</button>
             <button class="btn" onclick="openNoteModal(${data.order.id})">添加备注</button>
-            <button class="btn" onclick="openPreview(${data.order.id})">预览页</button>
+            <button class="btn disabled" title="预览功能今晚未接通">预览页</button>
           </div>
         </div>
         <div class="drawer-section"><h3>备注时间线</h3>${notesHtml}</div>

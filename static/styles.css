@@ -63,6 +63,14 @@ body {
   cursor: pointer;
   font: inherit;
 }
+.btn.disabled,
+.link-btn.disabled {
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .btn.primary:hover { background: var(--primary-2); }
 .link-btn { padding: 6px 10px; font-size: 13px; }
@@ -170,6 +178,69 @@ textarea { resize: vertical; }
 }
 .inline-result.ok { border-color: #bfdbfe; background: #eff6ff; }
 .inline-result.error { border-color: #fecaca; background: #fef2f2; }
+
+.workspace-test-panel {
+  margin: 14px 16px 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%);
+}
+.test-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.test-panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.test-panel-controls {
+  display: grid;
+  gap: 10px;
+}
+.test-summary-card,
+.test-result-block {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+}
+.test-summary-title,
+.test-result-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.test-summary-empty { color: #94a3b8; font-size: 13px; }
+.test-summary-pass { color: #166534; font-weight: 700; margin-bottom: 6px; }
+.test-summary-fail { color: #b91c1c; font-weight: 700; margin-bottom: 6px; }
+.test-panel-results {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.json-viewer {
+  margin: 0;
+  min-height: 200px;
+  max-height: 360px;
+  overflow: auto;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .table-shell { padding: 0; overflow: hidden; background: #fff; }
 .table-toolbar {
@@ -331,7 +402,9 @@ textarea { resize: vertical; }
   .workspace-toolbar-band,
   .filter-grid,
   .kv-grid,
-  .form-grid {
+  .form-grid,
+  .test-panel-grid,
+  .test-panel-results {
     grid-template-columns: 1fr;
   }
   .board-topbar {

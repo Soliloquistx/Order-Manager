@@ -582,6 +582,7 @@ def build_order_payload_from_vbk(item: VbkOrderItem) -> dict[str, Any]:
         f"确认状态: {item.confirm_status_text or item.pending_type_text or '-'}",
         f"分销渠道: {item.distribution_channel or '-'}",
     ]
+    order_type = item.order_type_text or ("占位单" if "占位" in (item.confirm_status_text or "") else "标准单")
     return {
         "order_no": item.order_no,
         "external_order_no": item.order_no,
@@ -608,4 +609,5 @@ def build_order_payload_from_vbk(item: VbkOrderItem) -> dict[str, Any]:
         "owner_id": 1,
         "next_follow_up_at": "",
         "initial_note": "",
+        "source_order_type": order_type,
     }
