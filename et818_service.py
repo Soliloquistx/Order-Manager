@@ -186,7 +186,7 @@ def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) 
             input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'a', bubbles: true }}));
             input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'a', bubbles: true }}));
             setTimeout(() => {{
-              let items = [...doc.querySelectorAll('.dropdown-item')];
+              let items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
               let item = items.find(el => (el.innerText || el.textContent || '').trim() === finalName);
               if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(finalName));
               if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(keyword));
@@ -195,7 +195,7 @@ def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) 
                 input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
                 input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
                 input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'Enter', bubbles: true }}));
-                items = [...doc.querySelectorAll('.dropdown-item')];
+                items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
                 item = items.find(el => (el.innerText || el.textContent || '').trim() === finalName)
                   || items.find(el => (el.innerText || el.textContent || '').trim().includes(finalName))
                   || items.find(el => (el.innerText || el.textContent || '').trim().includes(keyword));
@@ -284,9 +284,18 @@ def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> E
               setValue(input, finalText);
               input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'a', bubbles: true }}));
               input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'a', bubbles: true }}));
-              const items = [...doc.querySelectorAll('.dropdown-item')];
+              let items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
               let item = items.find(el => (el.innerText || el.textContent || '').trim() === finalText);
               if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(finalText));
+              if (!item) {{
+                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
+                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
+                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
+                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'Enter', bubbles: true }}));
+                items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
+                item = items.find(el => (el.innerText || el.textContent || '').trim() === finalText)
+                  || items.find(el => (el.innerText || el.textContent || '').trim().includes(finalText));
+              }}
               if (item) {{ item.click(); return true; }}
               return false;
             }};
@@ -305,6 +314,8 @@ def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> E
             if (peopleInputs[1]) setValue(peopleInputs[1], data.child_count);
 
             const roomCell = getValueCellByLabel('用房: *');
+            const roomSelect = roomCell?.querySelector('select');
+            if (roomSelect) {{ roomSelect.value = '三星'; roomSelect.dispatchEvent(new Event('change', {{ bubbles: true }})); }}
             const roomInputs = roomCell ? [...roomCell.querySelectorAll('input')] : [];
             if (roomInputs[0]) setValue(roomInputs[0], data.room_need.standard);
             if (roomInputs[1]) setValue(roomInputs[1], data.room_need.big_bed);
