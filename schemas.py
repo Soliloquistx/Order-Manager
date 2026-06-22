@@ -241,4 +241,5 @@ class Et818PayloadResponse(BaseModel):
     source_platform: str = "VBK"
     order_id: int
     order_no: str
+    total_amount_vbk: str = ""
     et818_payload: Et818Payload

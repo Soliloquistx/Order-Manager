@@ -51,45 +51,6 @@
       </div>
       <div id="vbkImportResult" class="inline-result hidden"></div>
 
-      <section class="workspace-test-panel">
-        <div class="test-panel-header">
-          <div>
-            <div class="panel-title">VBK → ET818 测试面板</div>
-            <div class="board-subtitle">输入订单号，直接看查单、本地详情同步、ET818 payload 结果</div>
-          </div>
-        </div>
-        <div class="test-panel-grid">
-          <div class="test-panel-controls">
-            <input id="testOrderNo" type="text" class="toolbar-input wide" placeholder="输入订单号，例如 1128146456209699" />
-            <div class="inline-tools">
-              <button class="btn" onclick="testFindOrder()">1. 查单入库</button>
-              <button class="btn" onclick="testSyncDetail()">2. 抓VBK详情</button>
-              <button class="btn" onclick="testBuildPayload()">3. 生成Payload</button>
-              <button class="btn" onclick="testEt818Prepare()">4. 打开ET818</button>
-              <button class="btn" onclick="testEt818Template()">5. 选模板</button>
-              <button class="btn" onclick="testEt818Main()">6. 填主信息</button>
-              <button class="btn" onclick="testEt818Travellers()">7. 填客人</button>
-              <button class="btn" onclick="testEt818Pickup()">8. 填接送</button>
-              <button class="btn primary" onclick="runFullVbkEt818Test()">一键测试</button>
-            </div>
-          </div>
-          <div id="testResultSummary" class="test-summary-card">
-            <div class="test-summary-title">测试摘要</div>
-            <div class="test-summary-empty">尚未开始测试</div>
-          </div>
-        </div>
-        <div class="test-panel-results">
-          <div class="test-result-block">
-            <div class="test-result-label">查单 / 同步结果</div>
-            <pre id="testStepResult" class="json-viewer">{}</pre>
-          </div>
-          <div class="test-result-block">
-            <div class="test-result-label">ET818 Payload</div>
-            <pre id="testPayloadResult" class="json-viewer">{}</pre>
-          </div>
-        </div>
-      </section>
-
       <section class="table-shell">
         <div class="table-toolbar table-toolbar-main">
           <div>
@@ -197,6 +158,27 @@
     </div>
   </div>
 
+  <style>
+    .compact-kv { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 16px; margin:8px 0 10px; font-size:13px; }
+    .mini-section-title { margin:10px 0 6px; font-size:12px; color:#666; font-weight:700; }
+    .compact-step-list { list-style:none; padding:0; margin:0; display:grid; gap:6px; }
+    .compact-step-list li { display:flex; align-items:flex-start; gap:8px; font-size:13px; line-height:1.45; }
+    .compact-step-list li strong { min-width:78px; }
+    .status-chip { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:999px; font-size:12px; font-weight:700; flex:0 0 18px; }
+    .status-chip.ok { background:#e8f7ee; color:#137a3d; }
+    .status-chip.fail { background:#fdecec; color:#b42318; }
+    .compact-error-box { margin-top:10px; padding:8px 10px; border-radius:8px; }
+    .btn.is-loading { opacity:.75; cursor:wait; }
+    .drawer-et818-result { margin:12px 0 0; }
+    .danger-zone { margin-top:12px; padding-top:12px; border-top:1px dashed #e5e7eb; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .btn.danger { background:#b42318; color:#fff; border-color:#b42318; }
+    .compact-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
+    .compact-table th, .compact-table td { padding:4px 8px; border:1px solid #e5e7eb; text-align:left; white-space:nowrap; }
+    .compact-table th { background:#f9fafb; font-weight:600; color:#666; }
+    .compact-table td { color:#333; }
+    .data-summary { margin-top:8px; }
+  </style>
+
   <script>
     const STATUS_OPTIONS = {
       payment_status: ['', '未支付', '部分支付', '已支付', '已退款'],
@@ -210,6 +192,8 @@
     let currentOrderId = null;
     let editingOrderId = null;
     let currentRows = [];
+    let drawerEt818Busy = false;
+    let drawerEt818SubmitBusy = false;
 
     async function init() {
       users = await (await fetch('/api/users')).json();
@@ -354,7 +338,7 @@
       });
       const data = await resp.json();
       if (!resp.ok) {
-        setInlineResult('vbkImportResult', `当前批量抓取接口尚未启用，请先使用下方“VBK → ET818 测试面板”或单个订单号测试。错误：${esc(data.detail || '未知错误')}`, 'error');
+        setInlineResult('vbkImportResult', `批量抓取失败：${esc(data.detail || '未知错误')}`, 'error');
         return;
       }
       const items = (data.items || []).map(item => `<li>${esc(item.order_no)} · ${esc(item.source || '')}${item.order ? ` · ${esc(item.order.customer_name || '')}` : ''}${item.detail ? ` · ${esc(item.detail)}` : ''}</li>`).join('');
@@ -372,10 +356,25 @@
         setInlineResult('vbkImportResult', '请输入订单号', 'error');
         return;
       }
-      document.getElementById('batchOrderNos').value = orderNo;
-      await batchFetchOrders();
-      const row = currentRows.find(x => x.order_no === orderNo);
-      if (row) await openDrawer(row.id);
+      setInlineResult('vbkImportResult', `正在查单 ${orderNo}...`, 'ok');
+      const resp = await fetch('/api/vbk/find-by-order-no', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setInlineResult('vbkImportResult', `查单失败：${esc(data.detail || '未知错误')}`, 'error');
+        return;
+      }
+      const orderId = data.order?.id;
+      if (!orderId) {
+        setInlineResult('vbkImportResult', `查单成功但未找到本地订单记录`, 'error');
+        return;
+      }
+      await loadOrders();
+      await openDrawer(orderId);
+      setInlineResult('vbkImportResult', `查单成功：${esc(orderNo)} → order #${orderId}`, 'ok');
     }
 
     async function refreshOne(orderNo) {
@@ -384,7 +383,7 @@
     }
 
     async function importVbkByDate() {
-      setInlineResult('vbkImportResult', '当前“按日期导入 VBK”功能今晚暂未接通，请先使用“VBK → ET818 测试面板”按订单号测试。', 'error');
+      setInlineResult('vbkImportResult', '按日期导入功能暂未接通。', 'error');
       return;
     }
 
@@ -393,247 +392,29 @@
       document.getElementById('singleOrderLookup').value = '';
     }
 
-    function getTestOrderNo() {
-      return (document.getElementById('testOrderNo').value || '').trim();
-    }
-
-    function setJsonViewer(id, data) {
-      document.getElementById(id).textContent = JSON.stringify(data, null, 2);
-    }
-
-    function setTestSummary(html) {
-      document.getElementById('testResultSummary').innerHTML = `<div class="test-summary-title">测试摘要</div>${html}`;
-    }
-
-    async function testFindOrder() {
-      const orderNo = getTestOrderNo();
-      if (!orderNo) {
-        alert('请先输入订单号');
-        return null;
-      }
-      const resp = await fetch('/api/vbk/find-by-order-no', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
-      });
-      const data = await resp.json();
-      setJsonViewer('testStepResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">查单失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      const orderId = data.order?.id || null;
-      setTestSummary(`
-        <div class="test-summary-pass">查单成功</div>
-        <div>order_id：<strong>${esc(orderId || '')}</strong></div>
-        <div>matched_list_kind：${esc(data.matched_list_kind || '')}</div>
-        <div>来源：${esc(data.source || '')}</div>
-      `);
-      await loadOrders();
-      return { orderId, data };
-    }
-
-    async function testSyncDetail(orderId = null, orderNo = null) {
-      orderNo = orderNo || getTestOrderNo();
-      if (!orderNo) {
-        alert('请先输入订单号');
-        return null;
-      }
-      if (!orderId) {
-        const lookup = await testFindOrder();
-        if (!lookup || !lookup.orderId) return null;
-        orderId = lookup.orderId;
-      }
-      const resp = await fetch(`/api/orders/${orderId}/sync-vbk-detail-from-browser`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
-      });
-      const data = await resp.json();
-      setJsonViewer('testStepResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">抓VBK详情失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      const result = data.sync_result || {};
-      setTestSummary(`
-        <div class="test-summary-pass">详情同步成功</div>
-        <div>order_id：<strong>${esc(orderId)}</strong></div>
-        <div>旅客数：<strong>${esc(result.traveller_count ?? 0)}</strong></div>
-        <div>接送数：<strong>${esc(result.pickup_dropoff_count ?? 0)}</strong></div>
-        <div>snapshot_updated：${result.snapshot_updated ? 'true' : 'false'}</div>
-      `);
-      return { orderId, data };
-    }
-
-    async function testBuildPayload(orderId = null) {
-      if (!orderId) {
-        const orderNo = getTestOrderNo();
-        if (!orderNo) {
-          alert('请先输入订单号');
-          return null;
-        }
-        const lookup = await testFindOrder();
-        if (!lookup || !lookup.orderId) return null;
-        orderId = lookup.orderId;
-      }
-      const resp = await fetch(`/api/orders/${orderId}/et818-payload`);
-      const data = await resp.json();
-      setJsonViewer('testPayloadResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">生成 ET818 Payload 失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      const payload = data.et818_payload || {};
-      setTestSummary(`
-        <div class="test-summary-pass">Payload 生成成功</div>
-        <div>模板：<strong>${esc(payload.template_selection?.template_name || '')}</strong></div>
-        <div>旅客数：<strong>${esc((payload.travellers || []).length)}</strong></div>
-        <div>接送数：<strong>${esc((payload.pickup_dropoff || []).length)}</strong></div>
-        <div>warnings：${esc((payload.meta?.warnings || []).join('；') || '无')}</div>
-      `);
-      return { orderId, data };
-    }
-
-    async function testEt818Prepare(orderId = null) {
-      if (!orderId) {
-        const lookup = await testFindOrder();
-        if (!lookup || !lookup.orderId) return null;
-        orderId = lookup.orderId;
-      }
-      const resp = await fetch(`/api/orders/${orderId}/et818-autofill/prepare`, { method: 'POST' });
-      const data = await resp.json();
-      setJsonViewer('testStepResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">打开 ET818 失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      setTestSummary(`
-        <div class="test-summary-pass">ET818 新增页已打开</div>
-        <div>page_ready：<strong>${data.page_ready ? 'true' : 'false'}</strong></div>
-        <div>token：<strong>${esc(data.token || '')}</strong></div>
-      `);
-      return { orderId, data };
-    }
-
-    async function testEt818Template(orderId = null, prepared = null) {
-      if (!prepared) {
-        prepared = await testEt818Prepare(orderId);
-        if (!prepared) return null;
-      }
-      const resp = await fetch(`/api/orders/${prepared.orderId}/et818-autofill/template`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ token: prepared.data.token, add_url: prepared.data.add_url })
-      });
-      const data = await resp.json();
-      setJsonViewer('testStepResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">ET818 模板选择失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      setTestSummary(`
-        <div class="test-summary-pass">ET818 模板已选中</div>
-        <div>模板：<strong>${esc(data.template_name || '')}</strong></div>
-        <div>phase：<strong>${esc(data.phase || '')}</strong></div>
-      `);
-      return { orderId: prepared.orderId, prepared: prepared.data, data };
-    }
-
-    async function testEt818Main(orderId = null, templated = null) {
-      if (!templated) {
-        templated = await testEt818Template(orderId);
-        if (!templated) return null;
-      }
-      const resp = await fetch(`/api/orders/${templated.orderId}/et818-autofill/main`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ token: templated.prepared?.token || templated.data?.token, add_url: templated.prepared?.add_url || templated.data?.add_url })
-      });
-      const data = await resp.json();
-      setJsonViewer('testStepResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">ET818 主信息填写失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      const rows = (data.required_main || []).map(x => `<li>${esc(x.label)}：${esc(x.value || '')}</li>`).join('');
-      setTestSummary(`
-        <div class="test-summary-pass">ET818 主信息已填写</div>
-        <div>大交通：<strong>${esc(data.transport_name || '')}</strong></div>
-        <div>团队类别：<strong>${esc(data.team_category || '')}</strong></div>
-        <ul>${rows}</ul>
-      `);
-      return { orderId: templated.orderId, prepared: templated.prepared, template: templated.data, data };
-    }
-
-    async function testEt818Travellers(orderId = null, mainDone = null) {
-      if (!mainDone) {
-        mainDone = await testEt818Main(orderId);
-        if (!mainDone) return null;
-      }
-      const token = mainDone.prepared?.token || mainDone.data?.token;
-      const resp = await fetch(`/api/orders/${mainDone.orderId}/et818-autofill/travellers`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ token, add_url: mainDone.prepared?.add_url || mainDone.data?.add_url })
-      });
-      const data = await resp.json();
-      setJsonViewer('testStepResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">ET818 客人名单填写失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      const filledHtml = (data.filled || []).map(r => `<li>${esc(r.name || '')} ${esc(r.id_no || '')}</li>`).join('');
-      setTestSummary(`
-        <div class="test-summary-pass">ET818 客人名单已填写</div>
-        <div>客人数：<strong>${data.traveller_count || 0}</strong></div>
-        <ul>${filledHtml}</ul>
-      `);
-      return { orderId: mainDone.orderId, prepared: mainDone.prepared, template: mainDone.template, main: mainDone.data, data };
-    }
-
-    async function testEt818Pickup(orderId = null, travDone = null) {
-      if (!travDone) {
-        travDone = await testEt818Travellers(orderId);
-        if (!travDone) return null;
-      }
-      const token = travDone.prepared?.token || travDone.data?.token;
-      const resp = await fetch(`/api/orders/${travDone.orderId}/et818-autofill/pickup`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ token, add_url: travDone.prepared?.add_url || travDone.data?.add_url })
-      });
-      const data = await resp.json();
-      setJsonViewer('testStepResult', data);
-      if (!resp.ok) {
-        setTestSummary(`<div class="test-summary-fail">ET818 接送填写失败：${esc(data.detail || '未知错误')}</div>`);
-        return null;
-      }
-      const filledHtml = (data.filled || []).map(r => `<li>${esc(r.action || '')} · ${esc(r.flight || '')}</li>`).join('');
-      setTestSummary(`
-        <div class="test-summary-pass">ET818 接送信息已填写</div>
-        <div>接送数：<strong>${data.pickup_count || 0}</strong></div>
-        <ul>${filledHtml}</ul>
-      `);
-      return { orderId: travDone.orderId, data };
-    }
-
-    async function runFullVbkEt818Test() {
-      const lookup = await testFindOrder();
-      if (!lookup || !lookup.orderId) return;
-      const sync = await testSyncDetail(lookup.orderId, getTestOrderNo());
-      if (!sync) return;
-      const payload = await testBuildPayload(lookup.orderId);
-      if (!payload) return;
-      const prepared = await testEt818Prepare(lookup.orderId);
-      if (!prepared) return;
-      const templated = await testEt818Template(lookup.orderId, prepared);
-      if (!templated) return;
-      const mainDone = await testEt818Main(lookup.orderId, templated);
-      if (!mainDone) return;
-      const travDone = await testEt818Travellers(lookup.orderId, mainDone);
-      if (!travDone) return;
-      await testEt818Pickup(lookup.orderId, travDone);
+    function renderNoSaveSummary(data, title = '一键 No-Save 已完成') {
+      const validate = data.validate || {};
+      const validateErrors = validate.errors || [];
+      const steps = data.steps || [];
+      const badge = (ok) => ok ? '<span class="status-chip ok">✓</span>' : '<span class="status-chip fail">✗</span>';
+      const stepsHtml = steps.map(s => `<li>${badge(!!s.ok)}<strong>${esc(s.phase || '')}</strong><span>${esc(s.detail || '')}</span></li>`).join('');
+      const checks = validate.required_main || [];
+      const keyChecks = checks.filter(x => ['线路模板','大交通','团队类别','订单电话/姓名','订单号','参团人数','客人名单','接送信息'].includes(x.field));
+      const checksHtml = keyChecks.map(c => `<li>${badge(!!c.ok)}${esc(c.field || '')}：${esc(c.actual || '')}</li>`).join('');
+      return `
+        <div class="test-summary-${validateErrors.length ? 'fail' : 'pass'}">${esc(title)}</div>
+        <div class="compact-kv">
+          <div>订单：<strong>${esc(data.order_no || '')}</strong></div>
+          <div>Validate：<strong>${esc(validate.detail || '')}</strong></div>
+          <div>客人：<strong>${esc(validate.traveller_count ?? 0)}</strong></div>
+          <div>接送：<strong>${esc(validate.pickup_count ?? 0)}</strong></div>
+        </div>
+        <div class="mini-section-title">步骤摘要</div>
+        <ul class="compact-step-list">${stepsHtml}</ul>
+        <div class="mini-section-title">关键字段</div>
+        <ul class="compact-step-list">${checksHtml}</ul>
+        ${validateErrors.length ? `<div class="test-summary-fail compact-error-box">${esc(validateErrors.join('；'))}</div>` : ''}
+      `;
     }
 
     function resetFilters() {
@@ -649,10 +430,144 @@
       document.querySelectorAll('.row-check').forEach(el => { el.checked = checked; });
     }
 
-    async function openDrawer(orderId) {
+    function setDrawerEt818Busy(busy) {
+      drawerEt818Busy = busy;
+      const btn = document.getElementById('drawerEt818WorkflowBtn');
+      if (!btn) return;
+      btn.disabled = !!busy;
+      btn.textContent = busy ? 'ET818 工作流运行中…' : 'ET818 工作流';
+      btn.classList.toggle('is-loading', !!busy);
+    }
+
+    async function runDrawerEt818Workflow(orderId, orderNo = '') {
+      if (drawerEt818Busy) return null;
+      setDrawerEt818Busy(true);
+      try {
+        return await runDrawerEt818NoSave(orderId, orderNo);
+      } finally {
+        setDrawerEt818Busy(false);
+      }
+    }
+
+    async function runDrawerEt818NoSave(orderId, orderNo = '') {
+      try {
+        const syncResp = await fetch(`/api/orders/${orderId}/sync-vbk-detail-from-browser`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
+        });
+        const syncData = await syncResp.json();
+        if (!syncResp.ok) {
+          alert(`VBK详情同步失败：${syncData.detail || '未知错误'}`);
+          return null;
+        }
+
+        const payloadResp = await fetch(`/api/orders/${orderId}/et818-payload`);
+        const payloadData = await payloadResp.json();
+        if (!payloadResp.ok) {
+          alert(`ET818 Payload 生成失败：${payloadData.detail || '未知错误'}`);
+          return null;
+        }
+
+        const resp = await fetch(`/api/orders/${orderId}/et818-autofill/no-save`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) {
+          alert(`一键 No-Save 失败：${data.detail || '未知错误'}`);
+          return null;
+        }
+        const validate = data.validate || {};
+        const resultHtml = `
+          <div class="drawer-section">
+            <div class="section-head"><h3>ET818 工作流结果</h3></div>
+            <div class="tip-box ${validate.errors && validate.errors.length ? 'tip-error' : 'tip-success'}">
+              ${renderNoSaveSummary(data, validate.errors && validate.errors.length ? 'ET818 工作流未完全通过' : 'ET818 工作流已通过')}
+            </div>
+          </div>
+        `;
+        await renderDrawer(orderId, resultHtml);
+        return data;
+      } catch (err) {
+        alert(`一键 No-Save 异常：${err.message || err}`);
+        return null;
+      }
+    }
+
+    function setDrawerEt818SubmitBusy(busy) {
+      drawerEt818SubmitBusy = busy;
+      const btn = document.getElementById('drawerEt818SubmitBtn');
+      if (!btn) return;
+      btn.disabled = !!busy;
+      btn.textContent = busy ? '提交中…' : '确认后提交到 ET818';
+      btn.classList.toggle('is-loading', !!busy);
+    }
+
+    async function confirmDrawerEt818Submit(orderId) {
+      if (drawerEt818SubmitBusy) return null;
+      const ok = window.confirm('确认提交到 ET818 吗？这一步会点击保存，产生真实外部副作用。');
+      if (!ok) return null;
+      setDrawerEt818SubmitBusy(true);
+      try {
+        const resp = await fetch(`/api/orders/${orderId}/et818-autofill/submit`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) {
+          alert(`ET818 提交失败：${data.detail || '未知错误'}`);
+          return null;
+        }
+        const resultHtml = `
+          <div class="drawer-section">
+            <div class="section-head"><h3>ET818 提交结果</h3></div>
+            <div class="tip-box tip-success">
+              <div><strong>已触发真实提交</strong></div>
+              <div>${esc(data.detail || '')}</div>
+            </div>
+          </div>
+        `;
+        await renderDrawer(orderId, resultHtml);
+        return data;
+      } catch (err) {
+        alert(`ET818 提交异常：${err.message || err}`);
+        return null;
+      } finally {
+        setDrawerEt818SubmitBusy(false);
+      }
+    }
+
+    async function renderDrawer(orderId, resultHtml = '') {
       currentOrderId = orderId;
-      const resp = await fetch(`/api/orders/${orderId}`);
-      const data = await resp.json();
+      const orderResp = await fetch(`/api/orders/${orderId}`);
+      const data = await orderResp.json();
+      const order = data.order || {};
+
+      // 先拿 payload，看有没有详情数据
+      let payloadResp = await fetch(`/api/orders/${orderId}/et818-payload`);
+      let payloadData = await (payloadResp.ok ? payloadResp.json() : { et818_payload: {}, ok: false });
+      let payload = payloadData.et818_payload || {};
+      let travellers = (payload.travellers || []);
+      let orderInfo = payload.order_info || {};
+
+      // 没有详情数据且是 VBK 来源 → 自动同步
+      if (!travellers.length && !orderInfo.adult_count && order.source_platform === 'VBK' && order.order_no) {
+        const syncResp = await fetch(`/api/orders/${orderId}/sync-vbk-detail-from-browser`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ order_no: order.order_no, list_kind: 'auto', sync_if_missing: true })
+        });
+        if (syncResp.ok) {
+          await loadOrders();
+          // 重新拿 payload
+          payloadResp = await fetch(`/api/orders/${orderId}/et818-payload`);
+          payloadData = await (payloadResp.ok ? payloadResp.json() : { et818_payload: {}, ok: false });
+          payload = payloadData.et818_payload || {};
+        }
+      }
+
+      const tmpl = payload.template_selection || {};
+      orderInfo = payload.order_info || {};
+      travellers = (payload.travellers || []);
+      const pickup = (payload.pickup_dropoff || []);
+      const room = orderInfo.room_need || {};
+      const totalVbk = payloadData.total_amount_vbk || '';
+
       document.getElementById('drawerTitle').textContent = data.order.product_name || '订单详情';
       document.getElementById('drawerSubtitle').textContent = `订单号：${data.order.order_no}`;
       document.getElementById('editOrderBtn').onclick = () => openOrderModal(data.order);
@@ -663,32 +578,72 @@
         </div>
       `).join('') || '<div class="empty-inline">暂无备注</div>';
       const logsHtml = data.logs.slice(0,5).map(l => `<li>${esc(l.created_at)} · ${esc(l.description || l.action)}</li>`).join('') || '<li>暂无日志</li>';
+
+      function travellerRow(t, i) {
+        return `<tr><td>${i+1}</td><td>${esc(t.name||'')}</td><td>${esc(t.phone||'')}</td><td>${esc(t.id_type||'')}</td><td>${esc(t.id_no||'')}</td><td>${esc(t.gender||'')}</td><td>${esc(t.birth_date?.raw||'')}</td><td>${esc(t.person_type||'')}</td></tr>`;
+      }
+      function pickupRow(p, i) {
+        return `<tr><td>${i+1}</td><td>${esc(p.date||'')}</td><td>${esc(p.flight||'')}</td><td>${esc(p.time||'')}</td><td>${esc(p.route||'')}</td><td>${esc(p.count||'')}人</td></tr>`;
+      }
+
+      const travellerTable = travellers.length
+        ? `<table class="compact-table"><thead><tr><th>#</th><th>姓名</th><th>电话</th><th>证件类型</th><th>证件号</th><th>性别</th><th>出生日期</th><th>类型</th></tr></thead><tbody>${travellers.map(travellerRow).join('')}</tbody></table>`
+        : '<div class="empty-inline">暂无客人数据</div>';
+
+      const pickupTable = pickup.length
+        ? `<table class="compact-table"><thead><tr><th>#</th><th>日期</th><th>航班</th><th>时间</th><th>路线</th><th>人数</th></tr></thead><tbody>${pickup.map(pickupRow).join('')}</tbody></table>`
+        : '<div class="empty-inline">暂无接送数据</div>';
+
+      const roomInfo = `标间${room.standard||0} / 大床${room.big_bed||0} / 三人间${room.triple||0} / 女单${room.single_female||0} / 男单${room.single_male||0}`;
+
+      const templateConfirm = tmpl.needs_manual_confirm
+        ? `<span style="color:#ff9800">需确认</span>`
+        : `<span style="color:#4caf50">自动匹配</span>`;
+
       document.getElementById('drawerContent').innerHTML = `
-        <div class="drawer-section"><h3>核心信息</h3><div class="kv-grid">
-          <div><label>订单号</label><span>${esc(data.order.order_no)}</span></div>
-          <div><label>外部单号</label><span>${esc(data.order.external_order_no || '')}</span></div>
-          <div><label>产品名称</label><span>${esc(data.order.product_name || '')}</span></div>
-          <div><label>客户</label><span>${esc(data.order.customer_name || '')}</span></div>
-          <div><label>渠道</label><span>${esc(data.order.channel || '')}</span></div>
-          <div><label>出发日期</label><span>${esc(data.order.departure_date || '')}</span></div>
-          <div><label>返程日期</label><span>${esc(data.order.return_date || '')}</span></div>
-          <div><label>金额</label><span>${money(data.order.total_amount)}</span></div>
-          <div><label>已付金额</label><span>${money(data.order.paid_amount)}</span></div>
-          <div><label>支付状态</label><span>${esc(data.order.payment_status || '')}</span></div>
-          <div><label>订单状态</label><span>${esc(data.order.order_status || '')}</span></div>
-          <div><label>备注</label><span>${esc(data.order.customer_note || data.order.latest_note_summary || '')}</span></div>
-        </div></div>
+        <div class="drawer-section"><h3>ET818 填表数据</h3>
+          <div class="data-summary">
+            <table class="compact-table">
+              <tr><td style="width:100px;font-weight:600;color:#999">线路模板</td><td>${esc(tmpl.template_name || tmpl.template_keyword || '未匹配')} ${templateConfirm}</td></tr>
+              <tr><td style="font-weight:600;color:#999">大交通</td><td>${esc(orderInfo.transport_name||'')}</td></tr>
+              <tr><td style="font-weight:600;color:#999">团队类别</td><td>${esc(orderInfo.team_category||'')}</td></tr>
+              <tr><td style="font-weight:600;color:#999">出行日期</td><td>${esc(orderInfo.departure_date?.raw||'')} → ${esc(orderInfo.return_date?.raw||'')}</td></tr>
+              <tr><td style="font-weight:600;color:#999">人数</td><td>成人 ${orderInfo.adult_count||0} / 儿童 ${orderInfo.child_count||0}</td></tr>
+              <tr><td style="font-weight:600;color:#999">用房</td><td>${roomInfo}</td></tr>
+              <tr><td style="font-weight:600;color:#999">联系人</td><td>${esc(orderInfo.contact_name||'')} / ${esc(orderInfo.contact_phone||'')}</td></tr>
+              <tr><td style="font-weight:600;color:#999">总计</td><td>${totalVbk ? esc(totalVbk)+' CNY' : '暂无'}</td></tr>
+            </table>
+          </div>
+          <div style="margin-top:12px"><strong>客人名单</strong>（${travellers.length}人）</div>
+          ${travellerTable}
+          <div style="margin-top:12px"><strong>接送信息</strong>（${pickup.length}条）</div>
+          ${pickupTable}
+        </div>
         <div class="drawer-section">
           <div class="section-head"><h3>快捷操作</h3></div>
           <div class="et818-actions">
+            <button class="btn primary" id="drawerEt818WorkflowBtn" onclick="runDrawerEt818Workflow(${data.order.id}, ${JSON.stringify(data.order.order_no || '')})">一键填表</button>
+            <button class="btn" onclick="openCompare(${data.order.id})">对比</button>
             <button class="btn" onclick="openNoteModal(${data.order.id})">添加备注</button>
-            <button class="btn disabled" title="预览功能今晚未接通">预览页</button>
+          </div>
+          <div class="danger-zone" style="margin-top:8px">
+            <span class="board-subtitle" style="font-size:12px;color:#999">验证通过后可真实提交到 ET818</span>
+            <button class="btn danger" id="drawerEt818SubmitBtn" onclick="confirmDrawerEt818Submit(${data.order.id})">提交到 ET818</button>
           </div>
         </div>
+        <div id="drawerEt818Result" class="drawer-et818-result">${resultHtml}</div>
         <div class="drawer-section"><h3>备注时间线</h3>${notesHtml}</div>
         <div class="drawer-section"><h3>最近日志</h3><ul class="log-list">${logsHtml}</ul></div>
       `;
       document.getElementById('drawer').classList.remove('hidden');
+    }
+
+    async function openDrawer(orderId) {
+      await renderDrawer(orderId);
+    }
+
+    function openCompare(orderId) {
+      window.open(`/compare/${orderId}`, '_blank');
     }
 
     function closeDrawer() { document.getElementById('drawer').classList.add('hidden'); }

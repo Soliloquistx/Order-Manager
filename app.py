@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
+import json
 
 from config import STATIC_DIR, TEMPLATES_DIR
 from database import init_db
@@ -8,10 +9,13 @@ from et818_bridge import Et818BridgeError
 from et818_service import (
     build_et818_payload_response,
     et818_autofill_main,
+    et818_autofill_no_save,
     et818_autofill_pickup,
     et818_autofill_prepare,
     et818_autofill_template,
     et818_autofill_travellers,
+    et818_autofill_validate,
+    et818_submit_after_confirm,
     find_et818_order_by_order_no,
     open_et818_detail_by_order_no,
     open_et818_detail_by_reg_id,
@@ -25,10 +29,13 @@ from repository import (
     get_order,
     get_order_by_order_no,
     get_stats,
+    get_vbk_detail_snapshot,
     import_orders_csv_text,
     list_logs,
     list_notes,
     list_orders,
+    list_order_pickup_dropoff,
+    list_order_travellers,
     list_users,
     patch_status,
     patch_workspace_fields,
@@ -61,6 +68,18 @@ def startup_event():
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     html = (TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(content=html)
+
+
+@app.get("/new", response_class=HTMLResponse)
+def new_index(request: Request):
+    html = (TEMPLATES_DIR / "new-index.html").read_text(encoding="utf-8")
+    return HTMLResponse(content=html)
+
+
+@app.get("/compare/{order_id}", response_class=HTMLResponse)
+def compare_page(request: Request, order_id: int):
+    html = (TEMPLATES_DIR / "compare.html").read_text(encoding="utf-8")
     return HTMLResponse(content=html)
 
 
@@ -215,6 +234,63 @@ def api_vbk_find_by_order_no(payload: VbkOrderLookupPayload):
     raise HTTPException(status_code=400, detail=last_error or f"未在 VBK 找到订单号 {order_no}")
 
 
+@app.post("/api/vbk/batch-find-by-order-nos")
+def api_vbk_batch_find(payload: dict):
+    order_nos = [x.strip() for x in (payload.get("order_nos") or []) if x.strip()]
+    if not order_nos:
+        raise HTTPException(status_code=400, detail="缺少订单号列表")
+    list_kind = payload.get("list_kind", "auto")
+    sync_if_missing = payload.get("sync_if_missing", True)
+
+    items: list[dict] = []
+    total = len(order_nos)
+    local_hits = 0
+    vbk_hits = 0
+    misses = 0
+    errors = 0
+
+    for order_no in order_nos:
+        try:
+            existing = get_order_by_order_no(order_no)
+            if existing:
+                items.append({"order_no": order_no, "source": "local", "order": existing})
+                local_hits += 1
+                continue
+            # not in local, try VBK
+            bridge = ChromeVbkBridge()
+            item = None
+            for kind in (["order", "hold"] if list_kind == "auto" else [list_kind]):
+                item = bridge.search_order_by_order_no(order_no, list_kind=kind)
+                if item:
+                    break
+            if not item:
+                items.append({"order_no": order_no, "source": "miss", "detail": "VBK 未找到"})
+                misses += 1
+                continue
+            if sync_if_missing:
+                new_payload = build_order_payload_from_vbk(item)
+                order_id, _ = upsert_order(new_payload)
+                local_order = get_order(order_id)
+                items.append({"order_no": order_no, "source": "vbk", "order": local_order, "detail": f"已入库 id={order_id}"})
+                vbk_hits += 1
+            else:
+                items.append({"order_no": order_no, "source": "vbk", "detail": f"已查到（未入库）"})
+                vbk_hits += 1
+        except Exception as e:
+            items.append({"order_no": order_no, "source": "error", "detail": str(e)[:200]})
+            errors += 1
+
+    return {
+        "ok": True,
+        "total": total,
+        "local_hits": local_hits,
+        "vbk_hits": vbk_hits,
+        "misses": misses,
+        "errors": errors,
+        "items": items,
+    }
+
+
 @app.post("/api/orders/{order_id}/sync-vbk-detail")
 def api_sync_vbk_detail(order_id: int, payload: VbkDetailSyncPayload):
     try:
@@ -269,6 +345,78 @@ def api_get_et818_payload(order_id: int):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/api/orders/{order_id}/compare")
+def api_compare(order_id: int):
+    """双栏对比：左边 VBK 原始数据，右边 ET818 填表数据"""
+    order = get_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+    order_no = order.get("order_no") or ""
+
+    # VBK 原始数据
+    vbk_raw_key_fields = {}
+    vbk_raw_travellers = []
+    vbk_raw_pickup = []
+
+    snapshot = get_vbk_detail_snapshot(order_no)
+    if snapshot:
+        # 结构化字段
+        vbk_raw_key_fields = {
+            k: snapshot.get(k)
+            for k in (
+                "order_type_text", "confirm_status_text", "payment_status_text",
+                "departure_date", "return_date", "departure_city",
+                "customer_name", "customer_phone",
+                "distribution_channel", "scenic_booking_no",
+                "reservation_scenic_name", "merchant_note",
+            )
+        }
+        # 原始 JSON 全量展示
+        raw_json_str = snapshot.get("raw_json") or ""
+        if raw_json_str:
+            try:
+                parsed = json.loads(raw_json_str)
+                vbk_raw_key_fields["_raw_json_parsed"] = parsed
+                # 从 raw_json 提取客人和接送（如果 snapshot 的 travellers 表没有的话）
+                if "travellers" in parsed:
+                    vbk_raw_travellers = parsed["travellers"]
+                if "flights" in parsed:
+                    vbk_raw_pickup = parsed["flights"]
+                if "pickup_dropoff" in parsed:
+                    vbk_raw_pickup = parsed["pickup_dropoff"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # 补齐 traveller / pickup 从分离表
+    if not vbk_raw_travellers:
+        vbk_raw_travellers = list_order_travellers(order_id)
+    if not vbk_raw_pickup:
+        vbk_raw_pickup = list_order_pickup_dropoff(order_id)
+
+    # ET818 填表数据
+    try:
+        payload_resp = build_et818_payload_response(order_id)
+        payload = payload_resp.model_dump() if hasattr(payload_resp, "model_dump") else vars(payload_resp)
+    except Exception as e:
+        payload = {"ok": False, "detail": str(e)[:200]}
+
+    return {
+        "order": {k: order.get(k) for k in (
+            "id", "order_no", "product_name", "route_name", "channel",
+            "source_platform", "customer_name", "customer_phone",
+            "departure_date", "return_date", "adult_count", "child_count",
+            "total_amount", "paid_amount", "payment_status", "order_status",
+        )},
+        "vbk_raw": {
+            "key_fields": vbk_raw_key_fields,
+            "travellers": vbk_raw_travellers,
+            "pickup_dropoff": vbk_raw_pickup,
+        },
+        "et818": payload,
+    }
+
+
 @app.post("/api/orders/{order_id}/et818-autofill/prepare")
 def api_et818_autofill_prepare(order_id: int):
     try:
@@ -321,6 +469,42 @@ def api_et818_autofill_travellers(order_id: int, payload: Et818AutofillActionPay
 def api_et818_autofill_pickup(order_id: int, payload: Et818AutofillActionPayload):
     try:
         return et818_autofill_pickup(order_id, payload).model_dump()
+    except HTTPException:
+        raise
+    except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/orders/{order_id}/et818-autofill/validate")
+def api_et818_autofill_validate(order_id: int, payload: Et818AutofillActionPayload):
+    try:
+        return et818_autofill_validate(order_id, payload).model_dump()
+    except HTTPException:
+        raise
+    except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/orders/{order_id}/et818-autofill/no-save")
+def api_et818_autofill_no_save(order_id: int):
+    try:
+        return et818_autofill_no_save(order_id)
+    except HTTPException:
+        raise
+    except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/orders/{order_id}/et818-autofill/submit")
+def api_et818_submit_after_confirm(order_id: int):
+    try:
+        return et818_submit_after_confirm(order_id)
     except HTTPException:
         raise
     except Et818BridgeError as e:

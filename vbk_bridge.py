@@ -376,7 +376,26 @@ class ChromeVbkBridge:
                     state,
                     "Runtime.evaluate",
                     {
-                        "expression": "(() => { const btn = document.evaluate(\"//*[contains(text(),'查看加密信息')]\", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; if (btn) { btn.click(); return {clicked:true}; } return {clicked:false}; })()",
+                        "expression": '''(() => {
+  const el = document.evaluate("//*[contains(text(),'加密信息')]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+  if (!el) return {clicked: false, reason: 'not found'};
+  // 如果已经是"隐藏加密信息"(已解密)，无需点击
+  const text = (el.innerText || el.textContent || '').trim();
+  if (text.includes('隐藏')) return {clicked: false, reason: 'already revealed', buttonText: text};
+  // 否则找到可点击的元素并点击
+  let target = el;
+  while (target && target !== document.body) {
+    const tag = target.tagName.toLowerCase();
+    if (tag === 'a' || tag === 'button' || tag === 'input') break;
+    target = target.parentElement;
+  }
+  target = target || el;
+  try { target.click(); } catch(e) {}
+  try { target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); } catch(e) {}
+  try { target.dispatchEvent(new MouseEvent('mouseup', {bubbles: true})); } catch(e) {}
+  try { target.dispatchEvent(new MouseEvent('click', {bubbles: true, view: window})); } catch(e) {}
+  return {clicked: true, targetTag: target.tagName, buttonText: text};
+})()''',
                         "returnByValue": True,
                         "awaitPromise": True,
                     },
@@ -386,7 +405,7 @@ class ChromeVbkBridge:
                     conn,
                     state,
                     "Runtime.evaluate",
-                    {"expression": "new Promise(r => setTimeout(r, 2500))", "returnByValue": True, "awaitPromise": True},
+                    {"expression": "new Promise(r => setTimeout(r, 5000))", "returnByValue": True, "awaitPromise": True},
                     timeout=20,
                 )
 
@@ -437,20 +456,68 @@ def parse_vbk_detail_from_text(order_no: str, list_kind: str, body_text: str, ta
         out: list[dict[str, Any]] = []
         target = ""
         for t in table_texts:
-            if "证件类型" in t and "证件号" in t and "姓名" in t:
+            if "证件类型" in t and ("证件号码" in t or "证件号" in t) and "姓名" in t:
                 target = t
                 break
         if not target:
             return out
 
-        text = target.replace("\t", "\n")
-        m = re.search(r"姓名.*?操作\n(.*)$", text, re.S)
-        if not m:
-            return out
-        data_text = m.group(1).strip()
-        chunks = [c.strip() for c in re.split(r"\n(?=[\u4e00-\u9fa5A-Za-z·]{2,}\n60岁以上老人)", data_text) if c.strip()]
-        for chunk in chunks:
-            person = _parse_traveller_block([x.strip() for x in chunk.split("\n") if x.strip()])
+        lines2 = [x.strip() for x in target.split("\n") if x.strip()]
+        header_tokens = {
+            "姓名",
+            "类型/性别",
+            "出生日期",
+            "国家/地区",
+            "证件类型",
+            "证件号码",
+            "证件有效期",
+            "签发地",
+            "发证日期",
+            "联系电话",
+            "性别",
+            "类型",
+            "生日",
+            "出生地",
+            "证件号",
+            "证件有效期",
+            "签发日期",
+            "是否拼房",
+            "拼房类型",
+            "电话",
+            "操作",
+            "成人",
+            "儿童",
+            "中国大陆",
+            "中国",
+            "未知",
+            "--",
+            "CN",
+        }
+        rows = [x for x in lines2 if x not in header_tokens]
+
+        def is_name_line(text: str) -> bool:
+            value = (text or "").strip()
+            if not value:
+                return False
+            if value in header_tokens:
+                return False
+            if value in {"CN", "身份证", "--"}:
+                return False
+            if any(ch.isdigit() for ch in value):
+                return False
+            return bool(re.match(r"^[\u4e00-\u9fa5·]{2,}(?:\s+[A-Z/]+)?$", value))
+
+        i = 0
+        while i < len(rows):
+            if not is_name_line(rows[i]):
+                i += 1
+                continue
+            chunk = [rows[i]]
+            i += 1
+            while i < len(rows) and not is_name_line(rows[i]):
+                chunk.append(rows[i])
+                i += 1
+            person = _parse_traveller_block(chunk)
             if person.get("name"):
                 out.append(person)
         return out
@@ -458,29 +525,33 @@ def parse_vbk_detail_from_text(order_no: str, list_kind: str, body_text: str, ta
     def _parse_traveller_block(block: list[str]) -> dict[str, Any]:
         import re
         text = "\n".join(block)
-        name = block[0] if block else ""
-        gender = "女" if "\n女\n" in f"\n{text}\n" else ("男" if "\n男\n" in f"\n{text}\n" else "")
+        raw_name = block[0] if block else ""
+        name = re.split(r"\s+", raw_name, maxsplit=1)[0]
+        gender = "女" if "女" in text else ("男" if "男" in text else "")
         birth = ""
-        m_birth = re.search(r"(19\d{2}-\d{2}-\d{2}|20\d{2}-\d{2}-\d{2})", text)
+        m_birth = re.search(r"(19\d{2}-\d{2}-\d{2}|20\d{2}-\d{2}-\d{2}|\*\*\*\*-\*\*-\*\*)", text)
         if m_birth:
             birth = m_birth.group(1)
+        id_type = "身份证" if "身份证" in text else ""
         id_no = ""
-        m_id = re.search(r"身份证\s*[•·]\s*([0-9Xx]{15,18})", text)
+        m_id = re.search(r"([0-9Xx\*]{15,18})", text)
         if m_id:
             id_no = m_id.group(1)
         phone = ""
-        m_phone = re.search(r"(1\d{10}|0\d{2,3}\d+转\d+)", text)
-        if m_phone:
-            phone = m_phone.group(1)
+        phone_candidates = re.findall(r"(1\d{10}|0\d{2,3}\d{7,}(?:转\d+)?)", text)
+        if id_no:
+            phone_candidates = [c for c in phone_candidates if c not in id_no]
+        if phone_candidates:
+            phone = phone_candidates[-1]
         return {
             "name": name,
             "gender": gender,
-            "birth_date": birth,
+            "birth_date": "" if "*" in birth else birth,
             "id_no": id_no,
-            "id_type": "身份证",
-            "person_type": "成人" if "成人" in text else "",
+            "id_type": id_type or "身份证",
+            "person_type": "成人" if "成人" in text else ("儿童" if "儿童" in text else ""),
             "phone": phone,
-            "encrypted_info_revealed": bool(birth or id_no),
+            "encrypted_info_revealed": bool(id_no and "*" not in id_no and birth and "*" not in birth),
             "from_vbk_detail": True,
         }
 

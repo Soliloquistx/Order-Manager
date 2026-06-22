@@ -37,7 +37,26 @@ from schemas import (
 )
 
 
+ET818_CONTROL_MAP = {
+    "线路模板": "输入后点选",
+    "大交通": "下拉选择",
+    "团队类别": "下拉选择",
+    "订单电话/姓名": "直接输入",
+    "订单号": "直接输入",
+    "出团日期": "直接输入",
+    "返程日期": "直接输入",
+    "参团人数": "直接输入",
+    "用房": "直接输入",
+    "客人名单": "表格输入",
+    "接送信息": "表格输入",
+}
+
+
 bridge = ChromeEt818Bridge()
+
+
+def et818_control_mode(field_name: str) -> str:
+    return ET818_CONTROL_MAP.get(field_name, "未知")
 
 
 def find_et818_order_by_order_no(order_no: str) -> list[dict]:
@@ -125,10 +144,23 @@ def et818_autofill_prepare(order_id: int) -> Et818AutofillReport:
           try {{
             const token = {json.dumps(target.token, ensure_ascii=False)};
             const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
-            if (!frame) return resolve({{ ok:false, detail:'未找到新增页 iframe' }});
-            const doc = frame.contentDocument;
-            const mainTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('订单电话/姓名') && (t.innerText || '').includes('订单号'));
-            resolve({{ ok:true, page_ready: !!(doc && doc.body && mainTable), detail: mainTable ? '新增页已就绪' : '主表未就绪', table_count: [...doc.querySelectorAll('table')].length, body_preview: (doc.body?.innerText || '').slice(0, 2000) }});
+            if (!frame || !frame.contentWindow) return resolve({{ ok:false, detail:'未找到新增页 iframe' }});
+            const doc = frame.contentWindow.document;
+            const bodyText = doc.body?.innerText || '';
+            const tables = [...doc.querySelectorAll('table')];
+            const mainTable = tables.find(t => (t.innerText || '').includes('订单电话/姓名') && (t.innerText || '').includes('订单号'));
+            const readyByTable = !!mainTable;
+            const readyByText = bodyText.includes('订单电话/姓名') && bodyText.includes('订单号');
+            const pageReady = readyByTable || readyByText;
+            resolve({{
+              ok:true,
+              page_ready: pageReady,
+              detail: pageReady ? '新增页已就绪' : '主表仍未出现',
+              table_count: tables.length,
+              ready_by_table: readyByTable,
+              ready_by_text: readyByText,
+              body_preview: bodyText.slice(0, 2000)
+            }});
           }} catch (e) {{
             resolve({{ ok:false, detail:e.message || String(e) }});
           }}
@@ -146,15 +178,21 @@ def et818_autofill_prepare(order_id: int) -> Et818AutofillReport:
         add_url=target.add_url,
         page_ready=bool(result.get("page_ready")),
         detail=result.get("detail", ""),
+        errors=[] if result.get("page_ready") else ['prepare: 主表仍未出现'],
     )
 
 
 def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) -> Et818AutofillReport:
+    """
+    线路模板固定归类为：输入关键词 -> 下拉候选点选。
+    这里不把“输入框里出现文字”当成功，必须点中候选并回读确认已提交。
+    """
     order = get_order_or_raise(order_id)
     payload_response = build_et818_payload_response(order_id)
     template_selection = payload_response.et818_payload.template_selection
     keyword = template_selection.template_keyword or template_selection.template_name
     final_name = template_selection.template_name or keyword
+    control_mode = et818_control_mode("线路模板")
     result = bridge.eval(
         f'''(() => new Promise(resolve => setTimeout(() => {{
           try {{
@@ -162,8 +200,9 @@ def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) 
             const keyword = {json.dumps(keyword, ensure_ascii=False)};
             const finalName = {json.dumps(final_name, ensure_ascii=False)};
             const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
-            if (!frame || !frame.contentDocument) return resolve({{ ok:false, detail:'未找到模板页 iframe' }});
-            const doc = frame.contentDocument;
+            if (!frame || !frame.contentWindow) return resolve({{ ok:false, detail:'未找到模板页 iframe' }});
+            const win = frame.contentWindow;
+            const doc = win.document;
             const mainTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('线路模板') && (t.innerText || '').includes('订单号'));
             if (!mainTable) return resolve({{ ok:false, detail:'未找到主表' }});
             let valueCell = null;
@@ -176,34 +215,56 @@ def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) 
             }}
             const input = valueCell ? valueCell.querySelector('input') : null;
             if (!input) return resolve({{ ok:false, detail:'未找到线路模板输入框' }});
-            const proto = HTMLInputElement.prototype;
-            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-            input.focus();
-            if (setter) setter.call(input, ''); else input.value = '';
-            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-            if (setter) setter.call(input, keyword); else input.value = keyword;
-            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-            input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'a', bubbles: true }}));
-            input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'a', bubbles: true }}));
-            setTimeout(() => {{
-              let items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
-              let item = items.find(el => (el.innerText || el.textContent || '').trim() === finalName);
-              if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(finalName));
-              if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(keyword));
-              if (!item) {{
-                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
-                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
-                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
-                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'Enter', bubbles: true }}));
-                items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
-                item = items.find(el => (el.innerText || el.textContent || '').trim() === finalName)
-                  || items.find(el => (el.innerText || el.textContent || '').trim().includes(finalName))
-                  || items.find(el => (el.innerText || el.textContent || '').trim().includes(keyword));
-              }}
-              if (!item) return resolve({{ ok:false, detail:'未出现匹配的线路模板候选', candidates: items.map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean).slice(0,20), keyword, finalName }});
+
+            const getItems = () => [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')]
+              .filter(el => !!(el.innerText || el.textContent || '').trim());
+            const textOf = (el) => (el.innerText || el.textContent || '').trim();
+            const setInput = (value) => {{
+              input.focus();
+              input.value = value == null ? '' : String(value);
+              input.dispatchEvent(new win.Event('input', {{ bubbles: true }}));
+              input.dispatchEvent(new win.Event('change', {{ bubbles: true }}));
+              input.dispatchEvent(new win.Event('keyup', {{ bubbles: true }}));
+            }};
+            const clickItem = (item) => {{
+              if (!item) return false;
+              item.scrollIntoView?.({{ block: 'nearest' }});
+              item.dispatchEvent(new MouseEvent('mouseenter', {{ bubbles: true }}));
+              item.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true }}));
               item.click();
-              resolve({{ ok:true, detail:'线路模板已选中', template_name: finalName, input_value: input.value || '' }});
-            }}, 2000);
+              item.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true }}));
+              return true;
+            }};
+            const findItem = (items) =>
+              items.find(el => textOf(el) === finalName)
+              || items.find(el => textOf(el).includes(finalName))
+              || items.find(el => textOf(el).includes(keyword));
+
+            setInput('');
+            setInput(keyword);
+            input.dispatchEvent(new win.KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
+            input.dispatchEvent(new win.KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
+
+            setTimeout(() => {{
+              let items = getItems();
+              let item = findItem(items);
+              if (!item) {{
+                input.dispatchEvent(new win.KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
+                input.dispatchEvent(new win.KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
+                items = getItems();
+                item = findItem(items);
+              }}
+              if (!item) return resolve({{ ok:false, detail:'未出现匹配的线路模板候选', candidates: items.map(textOf).slice(0,20), keyword, finalName }});
+              const clicked = clickItem(item);
+              setTimeout(() => {{
+                const committed = input.value || '';
+                const matched = committed.includes(finalName) || committed.includes(keyword);
+                if (!clicked || !matched) {{
+                  return resolve({{ ok:false, detail:'线路模板候选未实际选中', candidates: getItems().map(textOf).slice(0,20), committed_value: committed, keyword, finalName }});
+                }}
+                resolve({{ ok:true, detail:'线路模板已选中', template_name: finalName, committed_value: committed }});
+              }}, 800);
+            }}, 1200);
           }} catch (e) {{
             resolve({{ ok:false, detail:e.message || String(e) }});
           }}
@@ -220,15 +281,24 @@ def et818_autofill_template(order_id: int, payload: Et818AutofillActionPayload) 
         token=payload.token,
         add_url=payload.add_url,
         template_name=result.get("template_name", final_name),
+        errors=[] if control_mode == "输入后点选" else [f"线路模板控件类型异常: {control_mode}"],
         detail=result.get("detail", ""),
     )
 
 
 def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> Et818AutofillReport:
+    """
+    ET818 主信息区只按控件类型处理，不再临场猜控件：
+    - 直接输入：订单电话/姓名、订单号、日期、人数、用房
+    - 下拉选择：大交通、团队类别（必须真实点选候选项）
+    - 输入后点选：线路模板（在 template 阶段处理）
+    """
     order = get_order_or_raise(order_id)
     payload_response = build_et818_payload_response(order_id)
     et = payload_response.et818_payload
     order_info = et.order_info
+    transport_mode = et818_control_mode("大交通")
+    team_mode = et818_control_mode("团队类别")
 
     result = bridge.eval(
         f'''(() => new Promise(resolve => setTimeout(() => {{
@@ -246,20 +316,19 @@ def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> E
                 'room_need': order_info.room_need.model_dump(),
             }, ensure_ascii=False)};
             const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
-            if (!frame || !frame.contentDocument) return resolve({{ ok:false, detail:'未找到主信息页 iframe' }});
-            const doc = frame.contentDocument;
+            if (!frame || !frame.contentWindow) return resolve({{ ok:false, detail:'未找到主信息页 iframe' }});
+            const win = frame.contentWindow;
+            const doc = win.document;
             const mainTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('订单电话/姓名') && (t.innerText || '').includes('团队类别'));
             if (!mainTable) return resolve({{ ok:false, detail:'未找到订单信息主表' }});
 
-            const proto = HTMLInputElement.prototype;
-            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
             const setValue = (el, value) => {{
               if (!el) return;
               const v = value == null ? '' : String(value);
-              if (setter) setter.call(el, v); else el.value = v;
-              el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-              el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-              el.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+              el.value = v;
+              el.dispatchEvent(new win.Event('input', {{ bubbles: true }}));
+              el.dispatchEvent(new win.Event('change', {{ bubbles: true }}));
+              el.dispatchEvent(new win.Event('blur', {{ bubbles: true }}));
             }};
             const getValueCellByLabel = (label) => {{
               for (const row of [...mainTable.rows]) {{
@@ -277,27 +346,44 @@ def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> E
               if (inputs[2]) setValue(inputs[2], parts.day || '');
             }};
             const pickDropdown = (cell, finalText) => {{
-              if (!cell || !finalText) return false;
+              if (!cell || !finalText) return Promise.resolve({{ ok:false, committed:'', matched:false, candidates:[] }});
               const input = cell.querySelector('input');
-              if (!input) return false;
+              if (!input) return Promise.resolve({{ ok:false, committed:'', matched:false, candidates:[] }});
+              const getItems = () => [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')]
+                .filter(el => !!(el.innerText || el.textContent || '').trim());
+              const textOf = (el) => (el.innerText || el.textContent || '').trim();
+              const findItem = (items) =>
+                items.find(el => textOf(el) === finalText)
+                || items.find(el => textOf(el).includes(finalText));
+              const clickItem = (item) => {{
+                if (!item) return false;
+                item.scrollIntoView?.({{ block: 'nearest' }});
+                item.dispatchEvent(new MouseEvent('mouseenter', {{ bubbles: true }}));
+                item.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true }}));
+                item.click();
+                item.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true }}));
+                return true;
+              }};
               input.focus();
               setValue(input, finalText);
-              input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'a', bubbles: true }}));
-              input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'a', bubbles: true }}));
-              let items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
-              let item = items.find(el => (el.innerText || el.textContent || '').trim() === finalText);
-              if (!item) item = items.find(el => (el.innerText || el.textContent || '').trim().includes(finalText));
-              if (!item) {{
-                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
-                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
-                input.dispatchEvent(new KeyboardEvent('keydown', {{ key: 'Enter', bubbles: true }}));
-                input.dispatchEvent(new KeyboardEvent('keyup', {{ key: 'Enter', bubbles: true }}));
-                items = [...doc.querySelectorAll('.dropdown-item'), ...document.querySelectorAll('.dropdown-item')];
-                item = items.find(el => (el.innerText || el.textContent || '').trim() === finalText)
-                  || items.find(el => (el.innerText || el.textContent || '').trim().includes(finalText));
-              }}
-              if (item) {{ item.click(); return true; }}
-              return false;
+              input.dispatchEvent(new win.KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
+              input.dispatchEvent(new win.KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
+              return new Promise(resolvePick => setTimeout(() => {{
+                let items = getItems();
+                let item = findItem(items);
+                if (!item) {{
+                  input.dispatchEvent(new win.KeyboardEvent('keydown', {{ key: 'ArrowDown', bubbles: true }}));
+                  input.dispatchEvent(new win.KeyboardEvent('keyup', {{ key: 'ArrowDown', bubbles: true }}));
+                  items = getItems();
+                  item = findItem(items);
+                }}
+                const clicked = clickItem(item);
+                setTimeout(() => {{
+                  const committed = input.value || '';
+                  const matched = committed.includes(finalText);
+                  resolvePick({{ ok: clicked && matched, committed, matched, candidates: getItems().map(textOf).slice(0,20) }});
+                }}, 600);
+              }}, 900));
             }};
 
             setValue(getValueCellByLabel('订单电话/姓名:')?.querySelector('input'), data.contact_name);
@@ -305,48 +391,59 @@ def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> E
             setDateCell(getValueCellByLabel('返程日期:'), data.return_date);
             setValue(getValueCellByLabel('订单号:')?.querySelector('input'), data.order_no);
 
-            const transportOk = pickDropdown(getValueCellByLabel('大交通: *'), data.transport_name);
-            const teamOk = pickDropdown(getValueCellByLabel('团队类别:'), data.team_category);
+            Promise.all([
+              pickDropdown(getValueCellByLabel('大交通: *'), data.transport_name),
+              pickDropdown(getValueCellByLabel('团队类别:'), data.team_category),
+            ]).then(([transportResult, teamResult]) => {{
+              const transportOk = !!transportResult.ok;
+              const teamOk = !!teamResult.ok;
 
-            const peopleCell = getValueCellByLabel('参团人数: *');
-            const peopleInputs = peopleCell ? [...peopleCell.querySelectorAll('input')] : [];
-            if (peopleInputs[0]) setValue(peopleInputs[0], data.adult_count);
-            if (peopleInputs[1]) setValue(peopleInputs[1], data.child_count);
+              const peopleCell = getValueCellByLabel('参团人数: *');
+              const peopleInputs = peopleCell ? [...peopleCell.querySelectorAll('input')] : [];
+              if (peopleInputs[0]) setValue(peopleInputs[0], data.adult_count);
+              if (peopleInputs[1]) setValue(peopleInputs[1], data.child_count);
 
-            const roomCell = getValueCellByLabel('用房: *');
-            const roomSelect = roomCell?.querySelector('select');
-            if (roomSelect) {{ roomSelect.value = '三星'; roomSelect.dispatchEvent(new Event('change', {{ bubbles: true }})); }}
-            const roomInputs = roomCell ? [...roomCell.querySelectorAll('input')] : [];
-            if (roomInputs[0]) setValue(roomInputs[0], data.room_need.standard);
-            if (roomInputs[1]) setValue(roomInputs[1], data.room_need.big_bed);
-            if (roomInputs[2]) setValue(roomInputs[2], data.room_need.triple);
-            if (roomInputs[3]) setValue(roomInputs[3], data.room_need.single_female);
-            if (roomInputs[4]) setValue(roomInputs[4], data.room_need.single_male);
-            if (roomInputs[5]) setValue(roomInputs[5], data.room_need.nights);
+              const roomCell = getValueCellByLabel('用房: *');
+              const roomSelect = roomCell?.querySelector('select');
+              if (roomSelect) {{ roomSelect.value = '三星'; roomSelect.dispatchEvent(new Event('change', {{ bubbles: true }})); }}
+              const roomInputs = roomCell ? [...roomCell.querySelectorAll('input')] : [];
+              if (roomInputs[0]) setValue(roomInputs[0], data.room_need.standard);
+              if (roomInputs[1]) setValue(roomInputs[1], data.room_need.big_bed);
+              if (roomInputs[2]) setValue(roomInputs[2], data.room_need.triple);
+              if (roomInputs[3]) setValue(roomInputs[3], data.room_need.single_female);
+              if (roomInputs[4]) setValue(roomInputs[4], data.room_need.single_male);
+              if (roomInputs[5]) setValue(roomInputs[5], data.room_need.nights);
 
-            const readDate = (cell) => {{
-              const inputs = cell ? [...cell.querySelectorAll('input')] : [];
-              return [inputs[0]?.value || '', inputs[1]?.value || '', inputs[2]?.value || ''];
-            }};
-            const requiredMain = [
-              {{ label:'订单电话/姓名', value:getValueCellByLabel('订单电话/姓名:')?.querySelector('input')?.value || '' }},
-              {{ label:'出团日期', value:readDate(getValueCellByLabel('出团日期:')).join('-') }},
-              {{ label:'返程日期', value:readDate(getValueCellByLabel('返程日期:')).join('-') }},
-              {{ label:'大交通', value:getValueCellByLabel('大交通: *')?.querySelector('input')?.value || '' }},
-              {{ label:'订单号', value:getValueCellByLabel('订单号:')?.querySelector('input')?.value || '' }},
-              {{ label:'团队类别', value:getValueCellByLabel('团队类别:')?.querySelector('input')?.value || '' }},
-              {{ label:'参团人数', value:peopleInputs.map(x => x.value || '').join('/') }},
-              {{ label:'用房', value:roomInputs.map(x => x.value || '').join('/') }},
-            ];
+              const readDate = (cell) => {{
+                const inputs = cell ? [...cell.querySelectorAll('input')] : [];
+                return [inputs[0]?.value || '', inputs[1]?.value || '', inputs[2]?.value || ''];
+              }};
+              const requiredMain = [
+                {{ label:'订单电话/姓名', value:getValueCellByLabel('订单电话/姓名:')?.querySelector('input')?.value || '' }},
+                {{ label:'出团日期', value:readDate(getValueCellByLabel('出团日期:')).join('-') }},
+                {{ label:'返程日期', value:readDate(getValueCellByLabel('返程日期:')).join('-') }},
+                {{ label:'大交通', value:getValueCellByLabel('大交通: *')?.querySelector('input')?.value || '' }},
+                {{ label:'订单号', value:getValueCellByLabel('订单号:')?.querySelector('input')?.value || '' }},
+                {{ label:'团队类别', value:getValueCellByLabel('团队类别:')?.querySelector('input')?.value || '' }},
+                {{ label:'参团人数', value:peopleInputs.map(x => x.value || '').join('/') }},
+                {{ label:'用房', value:roomInputs.map(x => x.value || '').join('/') }},
+              ];
 
-            resolve({{
-              ok:true,
-              detail:'主信息已填写',
-              transport_name:data.transport_name,
-              team_category:data.team_category,
-              required_main: requiredMain,
-              transport_selected: transportOk,
-              team_selected: teamOk,
+              resolve({{
+                ok:true,
+                detail:'主信息已填写',
+                transport_name:data.transport_name,
+                team_category:data.team_category,
+                required_main: requiredMain,
+                transport_selected: transportOk,
+                team_selected: teamOk,
+                transport_committed: transportResult.committed || '',
+                team_committed: teamResult.committed || '',
+                dropdown_errors: [
+                  ...(!transportOk ? [{{ field:'大交通', candidates: transportResult.candidates || [], committed: transportResult.committed || '' }}] : []),
+                  ...(!teamOk ? [{{ field:'团队类别', candidates: teamResult.candidates || [], committed: teamResult.committed || '' }}] : []),
+                ],
+              }});
             }});
           }} catch (e) {{
             resolve({{ ok:false, detail:e.message || String(e) }});
@@ -366,6 +463,12 @@ def et818_autofill_main(order_id: int, payload: Et818AutofillActionPayload) -> E
         transport_name=result.get("transport_name", order_info.transport_name),
         team_category=result.get("team_category", order_info.team_category),
         required_main=result.get("required_main", []),
+        errors=[
+            *([f"大交通未实际选中: {result.get('transport_committed','')}" ] if not result.get("transport_selected", False) else []),
+            *([f"团队类别未实际选中: {result.get('team_committed','')}" ] if not result.get("team_selected", False) else []),
+            *([f"大交通控件类型异常: {transport_mode}"] if transport_mode != "下拉选择" else []),
+            *([f"团队类别控件类型异常: {team_mode}"] if team_mode != "下拉选择" else []),
+        ],
         detail=result.get("detail", ""),
     )
 
@@ -565,6 +668,216 @@ def et818_autofill_pickup(order_id: int, payload: Et818AutofillActionPayload) ->
     )
 
 
+def et818_autofill_validate(order_id: int, payload: Et818AutofillActionPayload) -> Et818AutofillReport:
+    order = get_order_or_raise(order_id)
+    payload_response = build_et818_payload_response(order_id)
+    et = payload_response.et818_payload
+    result = bridge.eval(
+        f'''(() => new Promise(resolve => setTimeout(() => {{
+          try {{
+            const token = {json.dumps(payload.token, ensure_ascii=False)};
+            const expected = {json.dumps({
+                'template_name': et.template_selection.template_name,
+                'template_keyword': et.template_selection.template_keyword,
+                'transport_name': et.order_info.transport_name,
+                'team_category': et.order_info.team_category,
+                'contact_name': et.order_info.contact_name,
+                'order_no': et.order_info.order_no,
+                'adult_count': et.order_info.adult_count,
+                'child_count': et.order_info.child_count,
+                'traveller_count': len(et.travellers),
+                'pickup_count': len(et.pickup_dropoff),
+            }, ensure_ascii=False)};
+            const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
+            if (!frame || !frame.contentWindow) return resolve({{ ok:false, detail:'未找到 validate iframe' }});
+            const win = frame.contentWindow;
+            const doc = win.document;
+            const mainTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('订单电话/姓名') && (t.innerText || '').includes('团队类别'));
+            if (!mainTable) return resolve({{ ok:false, detail:'未找到 validate 主表' }});
+
+            const getValueCellByLabel = (label) => {{
+              for (const row of [...mainTable.rows]) {{
+                for (let i = 0; i < row.cells.length; i += 1) {{
+                  if ((row.cells[i].innerText || '').trim() === label) return row.cells[i + 1] || null;
+                }}
+              }}
+              return null;
+            }};
+            const readDate = (cell) => {{
+              const inputs = cell ? [...cell.querySelectorAll('input')] : [];
+              return [inputs[0]?.value || '', inputs[1]?.value || '', inputs[2]?.value || ''].filter(Boolean).join('-');
+            }};
+            const peopleCell = getValueCellByLabel('参团人数: *');
+            const peopleInputs = peopleCell ? [...peopleCell.querySelectorAll('input')] : [];
+
+            const templateInput = (() => {{
+              for (const row of [...mainTable.rows]) {{
+                for (let i = 0; i < row.cells.length; i += 1) {{
+                  if ((row.cells[i].innerText || '').trim() === '线路模板:') return row.cells[i + 1]?.querySelector('input') || null;
+                }}
+              }}
+              return null;
+            }})();
+
+            const guestTables = [...doc.querySelectorAll('#guestTable')];
+            const bodyTable = guestTables.find(t => t.querySelector('tbody'));
+            const guestRows = bodyTable ? [...bodyTable.querySelectorAll('tbody tr')] : [];
+
+            const pickupTable = [...doc.querySelectorAll('table')].find(t => (t.innerText || '').includes('班次时间') && (t.innerText || '').includes('接送描述'));
+            const pickupRows = pickupTable ? [...pickupTable.querySelectorAll('tr')] : [];
+            const pickupMainRows = [pickupRows[1], pickupRows[4]].filter(Boolean);
+
+            const checks = [
+              {{ field:'线路模板', mode:'输入后点选', expected: expected.template_name || expected.template_keyword, actual: templateInput?.value || '', ok: (templateInput?.value || '').includes(expected.template_keyword || '') }},
+              {{ field:'大交通', mode:'下拉选择', expected: expected.transport_name, actual: getValueCellByLabel('大交通: *')?.querySelector('input')?.value || '' }},
+              {{ field:'团队类别', mode:'下拉选择', expected: expected.team_category, actual: getValueCellByLabel('团队类别:')?.querySelector('input')?.value || '' }},
+              {{ field:'订单电话/姓名', mode:'直接输入', expected: expected.contact_name, actual: getValueCellByLabel('订单电话/姓名:')?.querySelector('input')?.value || '' }},
+              {{ field:'订单号', mode:'直接输入', expected: expected.order_no, actual: getValueCellByLabel('订单号:')?.querySelector('input')?.value || '' }},
+              {{ field:'出团日期', mode:'直接输入', expected: '', actual: readDate(getValueCellByLabel('出团日期:')) }},
+              {{ field:'返程日期', mode:'直接输入', expected: '', actual: readDate(getValueCellByLabel('返程日期:')) }},
+              {{ field:'参团人数', mode:'直接输入', expected: `${{expected.adult_count}}/${{expected.child_count}}`, actual: peopleInputs.map(x => x.value || '').join('/') }},
+              {{ field:'客人名单', mode:'表格输入', expected: String(expected.traveller_count), actual: String(guestRows.length), ok: guestRows.length >= expected.traveller_count }},
+              {{ field:'接送信息', mode:'表格输入', expected: String(expected.pickup_count), actual: String(pickupMainRows.length), ok: pickupMainRows.length >= expected.pickup_count }},
+            ].map(item => ('ok' in item ? item : {{ ...item, ok: !item.expected || item.actual.includes(item.expected) || item.actual === item.expected }}));
+
+            const failed = checks.filter(x => !x.ok).map(x => `${{x.field}}: expected=${{x.expected}} actual=${{x.actual}}`);
+            resolve({{
+              ok:true,
+              detail: failed.length ? 'validate 发现未提交字段' : 'validate 通过',
+              checks,
+              errors: failed,
+              traveller_count: guestRows.length,
+              pickup_count: pickupMainRows.length,
+            }});
+          }} catch (e) {{
+            resolve({{ ok:false, detail:e.message || String(e) }});
+          }}
+        }}, 400)))()''',
+        timeout=60,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "validate 失败")
+    return Et818AutofillReport(
+        ok=True,
+        phase="validate",
+        order_id=order_id,
+        order_no=order.get("order_no", "") or "",
+        token=payload.token,
+        add_url=payload.add_url,
+        traveller_count=int(result.get("traveller_count") or 0),
+        pickup_count=int(result.get("pickup_count") or 0),
+        required_main=result.get("checks", []),
+        errors=result.get("errors", []),
+        detail=result.get("detail", ""),
+    )
+
+
+def et818_autofill_no_save(order_id: int) -> dict[str, Any]:
+    steps: list[dict[str, Any]] = []
+
+    prepare_report = et818_autofill_prepare(order_id)
+    payload = Et818AutofillActionPayload(token=prepare_report.token, add_url=prepare_report.add_url)
+    steps.append({"phase": "prepare", "ok": prepare_report.ok, "detail": prepare_report.detail})
+
+    template_report = et818_autofill_template(order_id, payload)
+    steps.append({"phase": "template", "ok": template_report.ok, "detail": template_report.detail, "errors": template_report.errors})
+
+    main_report = et818_autofill_main(order_id, payload)
+    steps.append({"phase": "main", "ok": main_report.ok, "detail": main_report.detail, "errors": main_report.errors})
+
+    travellers_report = None
+    payload_response = build_et818_payload_response(order_id)
+    if payload_response.et818_payload.travellers:
+        travellers_report = et818_autofill_travellers(order_id, payload)
+        steps.append({"phase": "travellers", "ok": travellers_report.ok, "detail": travellers_report.detail, "errors": travellers_report.errors})
+    else:
+        steps.append({"phase": "travellers", "ok": True, "detail": "无客人数据，跳过", "errors": []})
+
+    pickup_report = None
+    if payload_response.et818_payload.pickup_dropoff:
+        pickup_report = et818_autofill_pickup(order_id, payload)
+        steps.append({"phase": "pickup", "ok": pickup_report.ok, "detail": pickup_report.detail, "errors": pickup_report.errors})
+    else:
+        steps.append({"phase": "pickup", "ok": True, "detail": "无接送数据，跳过", "errors": []})
+
+    validate_report = et818_autofill_validate(order_id, payload)
+    steps.append({"phase": "validate", "ok": validate_report.ok and not validate_report.errors, "detail": validate_report.detail, "errors": validate_report.errors})
+
+    return {
+        "ok": True,
+        "phase": "no_save",
+        "order_id": order_id,
+        "order_no": prepare_report.order_no,
+        "token": prepare_report.token,
+        "add_url": prepare_report.add_url,
+        "steps": steps,
+        "validate": validate_report.model_dump(),
+    }
+
+
+def et818_submit_after_confirm(order_id: int) -> dict[str, Any]:
+    no_save = et818_autofill_no_save(order_id)
+    validate = no_save.get("validate", {}) or {}
+    errors = validate.get("errors", []) or []
+    if errors:
+        raise Et818BridgeError("validate 未通过，禁止提交")
+
+    token = no_save.get("token", "") or ""
+    add_url = no_save.get("add_url", "") or ""
+    if not token:
+        raise Et818BridgeError("缺少 token，无法提交")
+
+    result = bridge.eval(
+        f'''(() => new Promise(resolve => setTimeout(() => {{
+          try {{
+            const token = {json.dumps(token, ensure_ascii=False)};
+            const frame = [...document.querySelectorAll('iframe')].find(f => (f.src || '').includes(`time=${{token}}`));
+            if (!frame || !frame.contentWindow) return resolve({{ ok:false, detail:'未找到提交页 iframe' }});
+            const doc = frame.contentWindow.document;
+            const buttons = [...doc.querySelectorAll('button, input[type="button"], a')];
+            const saveBtn = buttons.find(el => /保存(并新增)?/.test((el.innerText || el.value || el.textContent || '').trim()));
+            if (!saveBtn) return resolve({{ ok:false, detail:'未找到保存按钮' }});
+            saveBtn.click();
+            resolve({{ ok:true, detail:'已点击保存按钮' }});
+          }} catch (e) {{
+            resolve({{ ok:false, detail:e.message || String(e) }});
+          }}
+        }}, 300)))()''',
+        timeout=40,
+    )
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise Et818BridgeError((result or {}).get("detail") or "提交失败")
+
+    return {
+        "ok": True,
+        "phase": "submit",
+        "order_id": order_id,
+        "order_no": no_save.get("order_no", ""),
+        "token": token,
+        "add_url": add_url,
+        "detail": result.get("detail", "已点击保存按钮"),
+        "validate": validate,
+    }
+
+
+def _extract_total_from_raw_json(raw_json: str) -> str:
+    """从 VBK 详情页原始文本中提取"总计"金额"""
+    import re, json as _json
+    if not raw_json:
+        return ""
+    try:
+        parsed = _json.loads(raw_json)
+        body = parsed.get("bodyText", "") or ""
+    except Exception:
+        body = raw_json
+    m = re.search(r"总计[:：]?\s*([\d,]+\.?\d*)\s*(?:CNY|元|￥|¥)?", body)
+    if m:
+        return m.group(1)
+    # 占位单时可能是"订单总额"
+    m = re.search(r"订单总额[\s\S]*?(\d[\d,]+\.\d{2})", body)
+    return m.group(1) if m else ""
+
+
 def build_et818_payload_response(order_id: int) -> Et818PayloadResponse:
     order = get_order_or_raise(order_id)
 
@@ -591,6 +904,7 @@ def build_et818_payload_response(order_id: int) -> Et818PayloadResponse:
         source_platform=order.get("source_platform", "VBK") or "VBK",
         order_id=order_id,
         order_no=order.get("order_no", "") or "",
+        total_amount_vbk=_extract_total_from_raw_json(bundle.get("vbk_detail", {}).get("raw_json", "") or ""),
         et818_payload=payload,
     )
 

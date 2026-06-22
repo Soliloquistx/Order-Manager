@@ -1,0 +1,1732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>订单工作台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════
+   Order Manager — Design System
+   Linear-inspired · Clean · By 飞鱼
+   ═══════════════════════════════════════════════ */
+:root {
+  --sans: -apple-system, 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --r: 6px;
+  --r-sm: 4px;
+  --r-lg: 8px;
+  --transition: 120ms ease;
+  /* Light */
+  --bg: #f4f7fb;
+  --s: #ffffff;
+  --h: #f8fbff;
+  --t: #152033;
+  --ts: #5d6b7f;
+  --tm: #8b97a8;
+  --a: #2457f5;
+  --ah: #1f49cf;
+  --abg: rgba(36,87,245,0.1);
+  --border: #dbe4ef;
+  --border-light: #e9eef4;
+  --r0: #b42318;
+  --r0bg: rgba(180,35,24,0.1);
+  --o: #b45309;
+  --obg: rgba(180,83,9,0.1);
+  --g: #15803d;
+  --gbg: rgba(21,128,61,0.1);
+  --b: #dbe4ef;
+  --bb: #c7d3e2;
+  --tb: #dbe4ef;
+  --green: #16a34a;
+  --blue: #2563eb;
+  --amber: #d97706;
+  --gray: #94a3b8;
+}
+
+/* ── Dark Mode ── */
+body.dark {
+  --bg: #0e0f13;
+  --s: #16171d;
+  --h: #1e1f26;
+  --t: #ffffff;
+  --ts: #e0e4ec;
+  --tm: #a0a8b8;
+  --a: #8b96ff;
+  --ah: #a5b0ff;
+  --abg: rgba(129,140,248,0.1);
+  --border: #25262e;
+  --border-light: #2a2b33;
+  --r0: #f97066;
+  --r0bg: rgba(249,112,102,0.1);
+  --o: #f5a623;
+  --obg: rgba(245,166,35,0.1);
+  --g: #32d583;
+  --gbg: rgba(50,213,131,0.1);
+  --b: #25262e;
+  --bb: #30313a;
+  --tb: #25262e;
+  --green: #4ade80;
+  --blue: #60a5fa;
+  --amber: #fbbf24;
+  --gray: #64748b;
+}
+
+body {
+  font: 13.5px/1.55 var(--sans);
+  color: var(--t);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  background: linear-gradient(180deg, #f7faff 0%, #f4f7fb 100%);
+}
+body.dark { background: #0e0f13; }
+
+/* ═══ Layout ═══ */
+.app { display: flex; height: 100vh; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ═══ Sidebar ═══ */
+.sb {
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: center;
+  background: #fff;
+  border-right: 1px solid var(--border);
+}
+body.dark .sb { background: #12131a; border-right: 1.5px solid #30313a; }
+
+.sb .logo {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 18px 8px 14px;
+  border-bottom: 1px solid var(--b);
+  width: 100%;
+}
+.sb .logo .li {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; margin-bottom: 3px;
+}
+.sb .logo .ld { font-size: 8px; color: var(--tm); letter-spacing: 0.5px; }
+
+.sb .nv { flex: 1; padding: 10px 0; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.sb .n {
+  display: flex; align-items: center; justify-content: center;
+  width: 56px; height: 48px; border-radius: 10px; cursor: pointer;
+  color: var(--tm); font-size: 13px;
+  text-decoration: none; position: relative;
+  flex-direction: column; gap: 2px;
+  transition: all var(--transition);
+  background: #fff; border: 1px solid var(--border-light);
+}
+body.dark .sb .n { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+.sb .n:hover { background: linear-gradient(180deg, #f2fbf5 0%, #dbf5e4 100%); color: #166534; border-color: #7ecb98; }
+body.dark .sb .n:hover { background: rgba(34,197,94,0.12); color: #dcfce7; border-color: rgba(74,222,128,0.24); }
+.sb .n.act { background: linear-gradient(180deg, #eafaf0 0%, #ccefd8 100%); color: #166534; border-color: #72c28d; }
+body.dark .sb .n.act { background: rgba(34,197,94,0.16); color: #dcfce7; border-color: rgba(74,222,128,0.3); }
+.sb .n .i { font-size: 18px; line-height: 1; }
+.sb .n .nl { display: block; font-size: 8px; color: inherit; letter-spacing: 0.3px; font-weight: 500; line-height: 1.1; }
+
+.sb .au { padding: 10px 8px; border-top: 1px solid var(--b); width: 100%; display: flex; justify-content: center; }
+.sb .au .tb {
+  width: 30px; height: 30px; border-radius: var(--r);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--tm); font-size: 14px;
+  transition: all var(--transition);
+}
+.sb .au .tb:hover { background: var(--h); color: var(--ts); }
+
+/* ═══ Top Bar ═══ */
+.top {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border);
+  background: var(--s);
+  flex-shrink: 0;
+}
+.top h1 { font-size: 17px; font-weight: 700; margin: 0; white-space: nowrap; }
+.top .meta { color: var(--tm); font-size: 12px; white-space: nowrap; }
+.top .top-right { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+.top .group-select { display: flex; align-items: center; gap: 6px; }
+.top .group-select label { font-size: 12px; color: var(--tm); white-space: nowrap; }
+.top .group-select select {
+  padding: 5px 22px 5px 8px; border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); color: var(--ts); font: 12px var(--sans); cursor: pointer;
+  appearance: none; outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b97a8' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 6px center;
+}
+body.dark .top .group-select select { background-color: var(--h); }
+
+.refresh-all-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 12px; border-radius: var(--r-lg);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  background: var(--abg); color: var(--a);
+  border: 1px solid transparent;
+  transition: all var(--transition); white-space: nowrap;
+}
+.refresh-all-btn:hover { background: var(--a); color: #fff; }
+.refresh-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+body.dark .refresh-all-btn { background: rgba(129,140,248,0.12); color: #a5b4fc; }
+body.dark .refresh-all-btn:hover { background: var(--a); color: #fff; }
+
+.settings-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: var(--r-lg);
+  font-size: 15px; cursor: pointer;
+  color: var(--tm); background: transparent; border: 1px solid transparent;
+  transition: all var(--transition);
+}
+.settings-btn:hover { background: var(--bg); border-color: var(--border); color: var(--ts); }
+
+/* ── Column settings dropdown ── */
+.col-settings {
+  position: fixed; top: 48px; right: 16px; z-index: 50;
+  min-width: 140px; padding: 6px 0;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  display: none; font-size: 13px;
+}
+body.dark .col-settings { box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+.col-settings.open { display: block; }
+.col-settings .cs-header {
+  padding: 6px 12px; font-size: 11px; font-weight: 700; color: var(--tm);
+  border-bottom: 1px solid var(--border-light); margin-bottom: 4px;
+}
+.col-settings .cs-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 12px; cursor: pointer; color: var(--t);
+  transition: background var(--transition);
+}
+.col-settings .cs-item:hover { background: var(--bg); }
+.col-settings .cs-item input[type="checkbox"] { accent-color: var(--a); margin: 0; }
+
+/* ═══ Filter Bar ═══ */
+.fb {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; border-bottom: 1px solid var(--border-light);
+  background: var(--s);
+  flex-wrap: wrap; flex-shrink: 0;
+}
+.fb .gs {
+  flex: 1; min-width: 200px;
+  padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg); color: var(--t);
+  font: 13px/1 var(--sans);
+  outline: none; transition: border-color var(--transition);
+}
+.fb .gs:focus { border-color: var(--a); }
+.fb .gs::placeholder { color: var(--tm); }
+body.dark .fb .gs { background: var(--h); }
+
+.fb .filter { display: flex; align-items: center; gap: 6px; }
+.fb .filter select {
+  padding: 7px 24px 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); color: var(--ts);
+  font: 13px var(--sans); cursor: pointer;
+  appearance: none; outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b97a8' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+  min-width: 90px;
+}
+body.dark .fb .filter select { background-color: var(--h); }
+.fb .filter select:hover { border-color: var(--bb); }
+
+/* ── Date range picker ── */
+.date-range-picker { position: relative; user-select: none; }
+.drp-trigger {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 24px 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); color: var(--ts);
+  font: 13px var(--sans); cursor: pointer; white-space: nowrap;
+  min-width: 120px;
+}
+body.dark .drp-trigger { background: var(--h); }
+.drp-trigger:hover { border-color: var(--bb); }
+.drp-arrow { font-size: 10px; color: var(--tm); position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.drp-dropdown {
+  position: absolute; top: 100%; left: 0; z-index: 10;
+  min-width: 200px; margin-top: 4px; padding: 10px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+  display: none;
+}
+body.dark .drp-dropdown { background: var(--h); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+.drp-dropdown.open { display: block; }
+.drp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.drp-row:last-child { margin-bottom: 0; }
+.drp-row label { font-size: 12px; color: var(--ts); min-width: 20px; }
+.drp-row .dp { flex: 1; padding: 6px 8px; font-size: 12px; }
+.drp-actions { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light); text-align: right; }
+.drp-clear {
+  padding: 4px 12px; border: none; border-radius: var(--r);
+  background: var(--abg); color: var(--a); font: 12px var(--sans);
+  cursor: pointer; font-weight: 500;
+}
+.drp-clear:hover { background: var(--a); color: #fff; }
+
+/* ── Multi-select dropdown ── */
+.fb .multi-select { position: relative; user-select: none; }
+.ms-trigger {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 24px 7px 10px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); color: var(--ts);
+  font: 13px var(--sans); cursor: pointer;
+  min-width: 90px; white-space: nowrap;
+  position: relative;
+}
+body.dark .ms-trigger { background: var(--h); }
+.ms-trigger:hover { border-color: var(--bb); }
+.ms-arrow { font-size: 10px; color: var(--tm); position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.ms-dropdown {
+  position: absolute; top: 100%; left: 0; z-index: 10;
+  min-width: 130px; margin-top: 4px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+  padding: 6px 0; display: none;
+}
+body.dark .ms-dropdown { background: var(--h); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+.ms-dropdown.open { display: block; }
+.ms-dropdown label {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; font-size: 13px; color: var(--ts); cursor: pointer;
+  transition: background var(--transition);
+}
+.ms-dropdown label:hover { background: var(--bg); }
+body.dark .ms-dropdown label:hover { background: rgba(255,255,255,0.05); }
+.ms-dropdown input[type="checkbox"] { accent-color: var(--a); margin: 0; }
+
+.fb .dp {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); color: var(--ts); font: 13px var(--sans);
+  outline: none; min-width: 110px;
+}
+.fb .dp:focus { border-color: var(--a); }
+body.dark .fb .dp { background: var(--h); }
+
+.fb .clear {
+  padding: 7px 14px; border: none; border-radius: var(--r-lg);
+  background: var(--abg); color: var(--a); font: 13px/1 var(--sans);
+  cursor: pointer; font-weight: 500;
+  transition: all var(--transition); white-space: nowrap;
+}
+.fb .clear:hover { background: var(--a); color: #fff; }
+
+/* ═══ Lookup Bar ═══ */
+.lookup-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 20px; border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(180deg, #f8fbff 0%, #f4f8fe 100%);
+  flex-shrink: 0;
+}
+body.dark .lookup-bar { background: linear-gradient(180deg, #16171d 0%, #12131a 100%); }
+.lookup-bar .gs { flex: 0 1 260px; }
+.btn-lookup {
+  padding: 7px 16px; border: 1px solid var(--a); border-radius: var(--r-lg);
+  background: var(--a); color: #fff; font: 13px/1 var(--sans);
+  cursor: pointer; font-weight: 600; white-space: nowrap;
+  transition: all var(--transition);
+}
+.btn-lookup:hover { background: var(--ah); }
+.btn-lookup:disabled { opacity: 0.5; cursor: not-allowed; }
+.lookup-status { font-size: 12px; color: var(--tm); margin-left: 4px; }
+.lookup-status.ok { color: var(--g); }
+.lookup-status.err { color: var(--r0); }
+
+/* ═══ Stats Bar ═══ */
+.stats {
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 20px; border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(180deg, var(--s) 0%, var(--bg) 100%);
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.stats .stat { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ts); }
+.stats .stat .num { font-weight: 700; font-size: 14px; color: var(--t); font-family: var(--mono); }
+.stats .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.stats .dot.green { background: var(--green); }
+.stats .dot.blue { background: var(--blue); }
+.stats .dot.amber { background: var(--amber); }
+.stats .dot.gray { background: var(--gray); }
+.stats .sep { width: 1px; height: 20px; background: var(--border-light); flex-shrink: 0; }
+.stats .total-amount { margin-left: auto; font-size: 12px; color: var(--ts); }
+.stats .total-amount .num { font-weight: 700; font-size: 14px; color: var(--t); font-family: var(--mono); }
+
+/* ═══ Table Container ═══ */
+.tc {
+  flex: 1; overflow: auto; padding: 0;
+  background: var(--s);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  margin: 12px 16px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+body.dark .tc { box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+
+/* ═══ Group ═══ */
+.group + .group { border-top: 1px solid var(--border-light); }
+.gh {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 20px;
+  cursor: pointer;
+  user-select: none; transition: background var(--transition);
+  position: sticky; top: 0; z-index: 3;
+  border-bottom: 1px solid var(--border-light);
+}
+.gh:hover { filter: brightness(0.97); }
+body.dark .gh:hover { filter: brightness(1.1); }
+.gh.gh-0 { background: #e8f4f8; }  /* 浅蓝 */
+.gh.gh-1 { background: #f0e6ff; }  /* 浅紫 */
+.gh.gh-2 { background: #fef3e2; }  /* 浅橙 */
+.gh.gh-3 { background: #e6f7ee; }  /* 浅绿 */
+.gh.gh-4 { background: #fce8e8; }  /* 浅红 */
+.gh.gh-5 { background: #e8f0fe; }  /* 浅蓝紫 */
+.gh.gh-6 { background: #f5e6d0; }  /* 浅棕 */
+.gh.gh-7 { background: #e0f4e8; }  /* 浅翠 */
+.gh.gh-8 { background: #f0edff; }  /* 浅薰衣草 */
+.gh.gh-9 { background: #e6f3f5; }  /* 浅青 */
+body.dark .gh.gh-0 { background: rgba(56,178,172,0.12); }
+body.dark .gh.gh-1 { background: rgba(139,92,246,0.12); }
+body.dark .gh.gh-2 { background: rgba(245,158,11,0.12); }
+body.dark .gh.gh-3 { background: rgba(16,185,129,0.12); }
+body.dark .gh.gh-4 { background: rgba(239,68,68,0.12); }
+body.dark .gh.gh-5 { background: rgba(99,102,241,0.12); }
+body.dark .gh.gh-6 { background: rgba(180,83,9,0.12); }
+body.dark .gh.gh-7 { background: rgba(52,211,153,0.12); }
+body.dark .gh.gh-8 { background: rgba(167,139,250,0.12); }
+body.dark .gh.gh-9 { background: rgba(45,212,191,0.12); }
+.gh .arrow { font-size: 10px; color: var(--tm); transition: transform var(--transition); width: 14px; text-align: center; flex-shrink: 0; }
+.gh .arrow.open { transform: rotate(90deg); }
+.gh .date { font-weight: 600; font-size: 13px; color: var(--t); }
+.gh .count { font-size: 12px; color: var(--tm); margin-left: 4px; }
+.gh .group-total { margin-left: auto; font-size: 12px; color: var(--tm); font-family: var(--mono); }
+.gh .group-stats { display: flex; align-items: center; gap: 8px; margin-left: 16px; }
+.gh .group-stats .gs-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ts); }
+
+/* ═══ Table ═══ */
+table.wt {
+  width: 100%; border-collapse: collapse;
+  table-layout: fixed; min-width: 800px;
+}
+table.wt th {
+  padding: 7px 12px; text-align: left;
+  font-size: 11px; font-weight: 600; color: var(--ts);
+  background: #f0f4f9;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-light);
+  position: sticky; top: 30px; z-index: 2;
+  white-space: nowrap;
+}
+table.wt.flat th { top: 0; }
+body.dark table.wt th { background: #1e1f26; }
+table.wt td {
+  padding: 10px 12px; font-size: 13px;
+  border-bottom: 1px solid var(--border-light);
+  border-right: 1px solid #f0f2f5;
+  color: var(--t); vertical-align: middle;
+}
+body.dark table.wt td { border-right-color: #25262e; }
+table.wt tr:hover td { background: #eaf2ff; }
+body.dark table.wt tr:hover td { background: rgba(96,165,250,0.1); }
+table.wt tr.cancelled td { color: var(--gray); opacity: 0.6; }
+table.wt tr.cancelled td .badge { opacity: 0.7; }
+table.wt tr.cancelled td .amount { color: var(--gray); }
+table.wt .cb { width: 32px; text-align: center; }
+table.wt .cb input { cursor: pointer; accent-color: var(--a); }
+.col-order { width: 130px; }
+.col-customer { width: 90px; }
+.col-channel { width: 72px; }
+.col-status { width: 88px; }
+.col-depart { width: 80px; }
+.col-order-date { width: 80px; }
+.col-pid { width: 60px; }
+.col-owner { width: 70px; }
+.col-butler { width: 70px; }
+.col-amount { width: 100px; }
+.col-actions { width: 130px; }
+
+.mono { font-family: var(--mono); font-size: 12px; color: var(--ts); }
+
+/* ── Column resize handle ── */
+.th-wrap { position: relative; display: inline-block; width: 100%; }
+.resize-handle {
+  position: absolute; right: -4px; top: 0; bottom: 0; width: 8px;
+  cursor: col-resize; z-index: 5;
+}
+.resize-handle:hover, .resize-handle.active { background: rgba(37,99,235,0.2); }
+
+.pid-link {
+  font-family: var(--mono); font-size: 11px; color: var(--a);
+  text-decoration: none; padding: 2px 4px; border-radius: var(--r-sm);
+  transition: all var(--transition); white-space: nowrap;
+}
+.pid-link:hover { background: var(--abg); text-decoration: underline; }
+.customer { font-weight: 500; }
+.customer .phone { display: block; font-size: 11px; color: var(--tm); font-weight: 400; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.badge-green { background: var(--gbg); color: var(--g); }
+.badge-green .dot { background: var(--g); }
+.badge-blue { background: var(--abg); color: var(--a); }
+.badge-blue .dot { background: var(--a); }
+.badge-amber { background: var(--obg); color: var(--o); }
+.badge-amber .dot { background: var(--o); }
+.badge-gray { background: #f1f5f9; color: var(--gray); }
+body.dark .badge-gray { background: rgba(255,255,255,0.06); }
+.badge-gray .dot { background: var(--gray); }
+.badge-red { background: var(--r0bg); color: var(--r0); }
+.badge-red .dot { background: var(--r0); }
+
+.amount { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.amount.paid { color: var(--g); }
+.amount.unpaid { color: var(--tm); }
+
+.actions { display: flex; gap: 4px; }
+.actions .link {
+  padding: 5px 10px; border-radius: var(--r);
+  font-size: 12px; color: var(--a); cursor: pointer;
+  background: transparent; border: 1px solid transparent;
+  text-decoration: none; transition: all var(--transition);
+  white-space: nowrap;
+}
+.actions .link:hover { background: var(--abg); border-color: var(--abg); }
+.actions .link.note { color: var(--ts); }
+.actions .link.note:hover { background: var(--bg); border-color: var(--border); }
+body.dark .actions .link.note:hover { background: var(--h); }
+
+/* ═══ Row inline edit ═══ */
+.editable-note {
+  cursor: text; padding: 2px 4px; border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  max-width: 200px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.editable-note:hover { border-color: var(--border); background: var(--bg); }
+.editable-note.empty { color: var(--tm); }
+
+.editable-text {
+  cursor: text; padding: 3px 6px; border-radius: var(--r-sm);
+  border: 1px solid transparent; display: inline-block;
+  min-width: 40px; font-size: 12px; color: var(--t);
+  transition: all var(--transition);
+}
+.editable-text:hover { border-color: var(--border); background: var(--bg); }
+.editable-text .placeholder { color: var(--tm); }
+
+.et-note { font-size: 12px; color: var(--ts); line-height: 1.4; display: inline-block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.et-note.empty { color: var(--tm); }
+.note-input {
+  width: 100%; padding: 4px 6px; border: 1px solid var(--a);
+  border-radius: var(--r-sm); font: 12px var(--sans); outline: none;
+  background: var(--s); color: var(--t);
+}
+
+/* ═══ Context Menu ═══ */
+.cm {
+  position: fixed; z-index: 100; display: none;
+  min-width: 160px; padding: 4px 0;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--s); box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  font: 13px var(--sans);
+}
+body.dark .cm { box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+.cm.open { display: block; }
+.cm .cmi {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px; cursor: pointer; color: var(--t);
+  transition: background var(--transition); border: none;
+  background: none; width: 100%; text-align: left; font: 13px var(--sans);
+}
+.cm .cmi:hover { background: var(--abg); color: var(--a); }
+.cm .cmi .ico { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.cm .sep { height: 1px; background: var(--border-light); margin: 4px 0; }
+.empty-state { padding: 60px 20px; text-align: center; color: var(--tm); }
+.empty-state .icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
+.empty-state .title { font-size: 15px; font-weight: 600; color: var(--ts); margin-bottom: 6px; }
+.empty-state .desc { font-size: 13px; }
+
+/* ═══ Loading ═══ */
+.loading-state { padding: 60px 20px; text-align: center; color: var(--tm); }
+.loading-state .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--a); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══ Responsive ═══ */
+@media (max-width: 900px) {
+  .sb { width: 56px; }
+  .sb .n { width: 44px; height: 40px; }
+  .fb { flex-direction: column; align-items: stretch; }
+  .fb .filter { flex-wrap: wrap; }
+  .stats { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sb">
+    <div class="logo">
+      <div class="li">飞</div>
+      <div class="ld">飞鱼</div>
+    </div>
+    <div class="nv">
+      <a class="n act" href="#" title="订单工作台">
+        <span class="i">📋</span>
+        <span class="nl">订单</span>
+      </a>
+      <a class="n" href="#" title="统计">
+        <span class="i">📊</span>
+        <span class="nl">统计</span>
+      </a>
+      <a class="n" href="#" title="导入导出">
+        <span class="i">📁</span>
+        <span class="nl">导入</span>
+      </a>
+    </div>
+    <div class="au">
+      <span class="tb" onclick="document.body.classList.toggle('dark')" title="切换主题">🌙</span>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Top Bar -->
+    <div class="top">
+      <h1>订单工作台</h1>
+      <div class="top-right">
+        <div class="group-select">
+          <label>分组：</label>
+          <select id="groupBy" onchange="changeGroupBy(this.value)">
+            <option value="departure_date">出发日期</option>
+            <option value="order_date">下单日期</option>
+            <option value="product_name">路线</option>
+            <option value="owner">负责人</option>
+            <option value="butler">管家</option>
+            <option value="none">不分组</option>
+          </select>
+        </div>
+        <span class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAllOrders()" title="刷新全部订单数据">🔄 全部刷新</span>
+        <span class="settings-btn" onclick="toggleColSettings()" title="列设置">⚙️</span>
+        <div class="meta">共 <strong id="totalCount">—</strong> 单</div>
+      </div>
+    </div>
+
+    <div class="col-settings" id="colSettings">
+      <div class="cs-header">显示列</div>
+      <label class="cs-item" data-col="order"><input type="checkbox" checked onchange="applyColSettings()" /> 订单号</label>
+      <label class="cs-item" data-col="customer"><input type="checkbox" checked onchange="applyColSettings()" /> 客户</label>
+      <label class="cs-item" data-col="channel"><input type="checkbox" checked onchange="applyColSettings()" /> 渠道</label>
+      <label class="cs-item" data-col="depart"><input type="checkbox" checked onchange="applyColSettings()" /> 出发/下单</label>
+      <label class="cs-item" data-col="pid"><input type="checkbox" checked onchange="applyColSettings()" /> ID</label>
+      <label class="cs-item" data-col="route"><input type="checkbox" checked onchange="applyColSettings()" /> 线路</label>
+      <label class="cs-item" data-col="owner"><input type="checkbox" checked onchange="applyColSettings()" /> 负责人</label>
+      <label class="cs-item" data-col="butler"><input type="checkbox" checked onchange="applyColSettings()" /> 管家</label>
+      <label class="cs-item" data-col="status"><input type="checkbox" checked onchange="applyColSettings()" /> 状态</label>
+      <label class="cs-item" data-col="amount"><input type="checkbox" checked onchange="applyColSettings()" /> 金额</label>
+    </div>
+
+    <!-- Lookup Bar -->
+    <div class="lookup-bar">
+      <input class="gs" id="orderLookupInput" placeholder="输入订单号，按回车添加..." />
+      <button class="btn-lookup" onclick="lookupAndAddOrder()">添加</button>
+      <span id="lookupStatus" class="lookup-status"></span>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="fb">
+      <input class="gs" id="searchBox" placeholder="🔍 搜索订单号 / 客户 / 产品 / 电话…" oninput="applyFilters()" />
+      <div class="filter date-range-picker" id="dateRangeWrap">
+        <div class="drp-trigger" onclick="toggleDateRange()">
+          <span class="drp-label" id="drpLabel">📅 选择日期</span>
+          <span class="drp-arrow">▾</span>
+        </div>
+        <div class="drp-dropdown" id="drpDropdown">
+          <div class="drp-row">
+            <label>从</label>
+            <input class="dp" id="dateFrom" type="date" onchange="onDateRangeChange()" />
+          </div>
+          <div class="drp-row">
+            <label>至</label>
+            <input class="dp" id="dateTo" type="date" onchange="onDateRangeChange()" />
+          </div>
+          <div class="drp-actions">
+            <button class="drp-clear" onclick="clearDateRange()">清除</button>
+          </div>
+        </div>
+      </div>
+      <div class="filter">
+        <select id="ownerFilter" onchange="applyFilters()"><option value="">全部负责人</option></select>
+      </div>
+      <div class="filter">
+        <select id="butlerFilter" onchange="applyFilters()"><option value="">全部管家</option></select>
+      </div>
+      <div class="filter">
+        <select id="routeFilter" onchange="applyFilters()"><option value="">全部线路</option></select>
+      </div>
+      <div class="filter">
+        <select id="statusFilter" onchange="applyFilters()"><option value="">全部状态</option></select>
+      </div>
+      <div class="filter multi-select" id="paymentFilterWrap">
+        <div class="ms-trigger" onclick="toggleMs('payment')">
+          <span id="paymentLabel">支付情况</span>
+          <span class="ms-arrow">▾</span>
+        </div>
+        <div class="ms-dropdown" id="paymentDropdown">
+          <label><input type="checkbox" value="" checked onchange="toggleMsAll('payment')" /> 全部</label>
+          <label><input type="checkbox" value="已支付" onchange="applyMsFilter('payment')" /> 已支付</label>
+          <label><input type="checkbox" value="未支付" onchange="applyMsFilter('payment')" /> 未支付</label>
+          <label><input type="checkbox" value="部分支付" onchange="applyMsFilter('payment')" /> 部分支付</label>
+          <label><input type="checkbox" value="已退款" onchange="applyMsFilter('payment')" /> 已退款</label>
+        </div>
+      </div>
+      <button class="clear" onclick="clearFilters()">清除筛选</button>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats" id="statsBar">
+      <span class="stat"><span class="num" id="statTotal">-</span> 总单数</span>
+      <span class="sep"></span>
+      <span class="stat"><span class="dot green"></span> <span class="num" id="statPaid">-</span> 已支付</span>
+      <span class="stat"><span class="dot amber"></span> <span class="num" id="statUnpaid">-</span> 未支付</span>
+      <span class="sep"></span>
+      <span class="stat"><span class="dot blue"></span> <span class="num" id="statConfirmed">-</span> 已确认</span>
+      <span class="stat"><span class="dot gray"></span> <span class="num" id="statPending">-</span> 待确认</span>
+      <span class="total-amount">总金额 <span class="num" id="statAmount">¥0</span></span>
+    </div>
+
+    <!-- Table -->
+    <div class="tc" id="tableContainer">
+      <div class="loading-state" id="loadingState">
+        <div class="spinner"></div>
+        <div>加载订单数据...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <div id="contextMenu" class="cm">
+    <button class="cmi" onclick="cmCopy('id_customer_route')"><span class="ico">📋</span> 复制订单号 / 客户 / 路线</button>
+    <div class="sep"></div>
+    <button class="cmi" onclick="cmCompare()"><span class="ico">🔍</span> 查看对比</button>
+    <button class="cmi" onclick="cmOpenVbk()"><span class="ico">🌐</span> VBK 订单页</button>
+    <button class="cmi" onclick="cmOpenEt()"><span class="ico">📊</span> ET 详情页</button>
+    <div class="sep"></div>
+    <button class="cmi" onclick="cmRefresh()"><span class="ico">🔄</span> 刷新数据</button>
+  </div>
+
+<script>
+// ════════════════════════════════════════════
+//  Mock Data — 后续替换为 API 调用
+// ════════════════════════════════════════════
+const MOCK_ORDERS = [
+  { id:15, order_no:'1128146497465001', customer_name:'傅嘉程', customer_phone:'134****8646',
+    channel:'携程', product_name:'兰州+西宁+青海湖+敦煌+嘉峪关10日9晚', product_id:'31044867',
+    departure_date:'2026-06-21', order_date:'2026-06-10', adult_count:1, child_count:0, total_amount:5372.81, paid_amount:5372.81,
+    payment_status:'已支付', order_status:'已确认', follow_status:'已解决', customer_note:'优惠100/人', et_note:'已对接地接，优惠已确认',
+    owner:'李明强', butler:'王芳' },
+  { id:14, order_no:'1128146497232215', customer_name:'张美华', customer_phone:'138****5521',
+    channel:'携程', product_name:'云南昆明+大理+丽江+泸沽湖8日7晚', product_id:'29867543',
+    departure_date:'2026-06-21', order_date:'2026-06-08', adult_count:2, child_count:0, total_amount:8960.00, paid_amount:8960.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'待跟进', customer_note:'', et_note:'',
+    owner:'李明强', butler:'' },
+  { id:16, order_no:'1128146497333394', customer_name:'李明', customer_phone:'186****3301',
+    channel:'抖音', product_name:'甘南+扎尕那+若尔盖+莲宝叶则5日4晚', product_id:'31567221',
+    departure_date:'2026-06-21', order_date:'2026-06-15', adult_count:1, child_count:1, total_amount:4280.50, paid_amount:4280.50,
+    payment_status:'已支付', order_status:'已确认', follow_status:'跟进中', customer_note:'需确认门票政策', et_note:'景区门票政策待核实',
+    owner:'', butler:'刘静' },
+  { id:17, order_no:'1128146497500123', customer_name:'王磊', customer_phone:'139****7722',
+    channel:'微信', product_name:'三亚+蜈支洲+天堂森林公园5日4晚', product_id:'28765431',
+    departure_date:'2026-06-22', order_date:'2026-06-12', adult_count:2, child_count:1, total_amount:7250.00, paid_amount:7250.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'已解决', customer_note:'加床', et_note:'已安排加床',
+    owner:'陈晓', butler:'王芳' },
+  { id:18, order_no:'1128146497500456', customer_name:'陈雪', customer_phone:'150****6688',
+    channel:'携程', product_name:'桂林+阳朔+龙脊梯田4日3晚', product_id:'30214567',
+    departure_date:'2026-06-22', order_date:'2026-06-18', adult_count:2, child_count:0, total_amount:3840.00,
+    payment_status:'未支付', order_status:'待确认', follow_status:'待跟进', customer_note:'', et_note:'',
+    owner:'李明强', butler:'' },
+  { id:19, order_no:'1128146497500789', customer_name:'赵建国', customer_phone:'137****4499',
+    channel:'携程', product_name:'成都+九寨沟+黄龙+都江堰6日5晚', product_id:'32567890',
+    departure_date:'2026-06-23', order_date:'2026-06-05', adult_count:4, child_count:0, total_amount:15200.00, paid_amount:8000.00,
+    payment_status:'部分支付', order_status:'已确认', follow_status:'跟进中', customer_note:'分两间房', et_note:'已预留两间标间',
+    owner:'李明强', butler:'刘静' },
+  { id:20, order_no:'1128146497501011', customer_name:'刘芳', customer_phone:'158****3355',
+    channel:'抖音', product_name:'西安+华山+兵马俑+大雁塔4日3晚', product_id:'27890123',
+    departure_date:'2026-06-23', order_date:'2026-06-20', adult_count:1, child_count:0, total_amount:2980.00,
+    payment_status:'未支付', order_status:'待确认', follow_status:'待跟进', customer_note:'', et_note:'',
+    owner:'', butler:'' },
+  { id:21, order_no:'1128146497501314', customer_name:'孙伟', customer_phone:'136****1177',
+    channel:'小红书', product_name:'厦门+鼓浪屿+云水谣+火山岛5日4晚', product_id:'33456712',
+    departure_date:'2026-06-24', order_date:'2026-06-14', adult_count:2, child_count:1, total_amount:5670.00, paid_amount:5670.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'已解决', customer_note:'儿童不占床', et_note:'儿童不占床已备注',
+    owner:'陈晓', butler:'王芳' },
+  { id:22, order_no:'1128146497501617', customer_name:'周婷', customer_phone:'152****8833',
+    channel:'携程', product_name:'张家界+天门山+凤凰古城5日4晚', product_id:'31234567',
+    departure_date:'2026-06-24', order_date:'2026-06-19', adult_count:1, child_count:0, total_amount:3350.00,
+    payment_status:'未支付', order_status:'待确认', follow_status:'待跟进', customer_note:'', et_note:'',
+    owner:'李明强', butler:'' },
+  { id:23, order_no:'1128146497501920', customer_name:'吴强', customer_phone:'182****2266',
+    channel:'微信', product_name:'拉萨+林芝+羊卓雍措+纳木错8日7晚', product_id:'34567890',
+    departure_date:'2026-06-25', order_date:'2026-06-01', adult_count:2, child_count:0, total_amount:12800.00, paid_amount:12800.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'跟进中', customer_note:'已付全款，需安排接送', et_note:'全款已付，接送已安排',
+    owner:'陈晓', butler:'刘静' },
+];
+
+// ── Extracted unique values ──
+const statuses = [...new Set(MOCK_ORDERS.map(o => o.order_status))].sort();
+
+let orders = [...MOCK_ORDERS];
+let groupField = 'departure_date';
+
+// ── Unique values for dropdowns ──
+const ownerOptions = [...new Set(MOCK_ORDERS.map(o => o.owner).filter(Boolean))].sort();
+const butlerOptions = [...new Set(MOCK_ORDERS.map(o => o.butler).filter(Boolean))].sort();
+
+// ════════════════════════════════════════════
+//  Lookup & Add Order
+// ════════════════════════════════════════════
+function lookupAndAddOrder() {
+  const input = document.getElementById('orderLookupInput');
+  const status = document.getElementById('lookupStatus');
+  const orderNo = input.value.trim();
+  if (!orderNo) { status.className = 'lookup-status err'; status.textContent = '请输入订单号'; return; }
+
+  status.className = 'lookup-status';
+  status.textContent = '正在查询 VBK...';
+  const btn = document.querySelector('.btn-lookup');
+  btn.disabled = true;
+
+  fetch('/api/vbk/find-by-order-no', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.disabled = false;
+    if (!data.ok || !data.order) {
+      status.className = 'lookup-status err';
+      status.textContent = data.detail || 'VBK 未找到该订单';
+      return;
+    }
+    const orderId = data.order.id;
+    status.className = 'lookup-status ok';
+    status.textContent = `已添加，订单 #${orderId}`;
+    input.value = '';
+    // 打开对比页
+    window.open(`/compare/${orderId}`, '_blank');
+    // 刷新列表
+    orders = [...MOCK_ORDERS];
+    // 需要从 API 刷新，但现在是 mock 模式，后面接真实 API 后调用 loadFromApi()
+  })
+  .catch(err => {
+    btn.disabled = false;
+    status.className = 'lookup-status err';
+    status.textContent = '查询失败: ' + err.message;
+  });
+}
+
+// ════════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════════
+function initFilters() {
+  populateSelectWithCount('ownerFilter', MOCK_ORDERS, 'owner', '销售');
+  populateSelectWithCount('butlerFilter', MOCK_ORDERS, 'butler', '管家');
+  populateSelectWithCount('routeFilter', MOCK_ORDERS, 'product_name', '路线');
+  populateSelectWithCount('statusFilter', MOCK_ORDERS, 'order_status');
+
+  // Restore filters from URL
+  restoreFiltersFromUrl();
+
+  // Enter key for lookup
+  document.getElementById('orderLookupInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') lookupAndAddOrder();
+  });
+
+  // Apply restored filters
+  applyFilters();
+}
+
+document.addEventListener('DOMContentLoaded', initFilters);
+
+function populateSelectWithCount(id, data, field, label) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  sel.innerHTML = '';
+  const total = data.length;
+  const first = document.createElement('option');
+  first.value = '';
+  first.textContent = label || `全部 (${total})`;
+  sel.appendChild(first);
+  const counts = {};
+  data.forEach(o => {
+    const val = o[field] || '';
+    if (val) counts[val] = (counts[val] || 0) + 1;
+  });
+  Object.keys(counts).sort((a, b) => a.localeCompare(b, 'zh')).forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = `${v} (${counts[v]})`;
+    sel.appendChild(opt);
+  });
+}
+
+// ════════════════════════════════════════════
+//  Filter Persistence (URL params)
+// ════════════════════════════════════════════
+function syncFiltersToUrl() {
+  const params = new URLSearchParams();
+  const search = document.getElementById('searchBox').value.trim();
+  if (search) params.set('q', search);
+  const dateFrom = document.getElementById('dateFrom').value;
+  if (dateFrom) params.set('from', dateFrom);
+  const dateTo = document.getElementById('dateTo').value;
+  if (dateTo) params.set('to', dateTo);
+  const owner = document.getElementById('ownerFilter').value;
+  if (owner) params.set('owner', owner);
+  const butler = document.getElementById('butlerFilter').value;
+  if (butler) params.set('butler', butler);
+  const route = document.getElementById('routeFilter').value;
+  if (route) params.set('route', route);
+  const status = document.getElementById('statusFilter').value;
+  if (status) params.set('status', status);
+  // Payment multi-select
+  const paymentVals = getPaymentFilterValues();
+  if (paymentVals.length) params.set('pay', paymentVals.join(','));
+  // Group by
+  if (groupField !== 'departure_date') params.set('group', groupField);
+
+  const qs = params.toString();
+  const url = qs ? window.location.pathname + '?' + qs : window.location.pathname;
+  history.replaceState(null, '', url);
+}
+
+function restoreFiltersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('q')) document.getElementById('searchBox').value = params.get('q');
+  if (params.has('from')) document.getElementById('dateFrom').value = params.get('from');
+  if (params.has('to')) document.getElementById('dateTo').value = params.get('to');
+  if (params.has('owner')) document.getElementById('ownerFilter').value = params.get('owner');
+  if (params.has('butler')) document.getElementById('butlerFilter').value = params.get('butler');
+  if (params.has('route')) document.getElementById('routeFilter').value = params.get('route');
+  if (params.has('status')) document.getElementById('statusFilter').value = params.get('status');
+  if (params.has('pay')) {
+    const selected = params.get('pay').split(',');
+    document.querySelectorAll('#paymentDropdown input[type="checkbox"]').forEach(cb => {
+      if (cb.value === '') {
+        cb.checked = false;
+      } else {
+        cb.checked = selected.includes(cb.value);
+      }
+    });
+    updatePaymentLabel();
+  }
+  if (params.has('group')) {
+    const g = params.get('group');
+    document.getElementById('groupBy').value = g;
+    groupField = g;
+  }
+}
+
+// ════════════════════════════════════════════
+//  Filters
+// ════════════════════════════════════════════
+// ── Date range picker ──
+function toggleDateRange() {
+  document.getElementById('drpDropdown').classList.toggle('open');
+}
+function onDateRangeChange() {
+  updateDrpLabel();
+  applyFilters();
+}
+function clearDateRange() {
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  updateDrpLabel();
+  applyFilters();
+  document.getElementById('drpDropdown').classList.remove('open');
+}
+function updateDrpLabel() {
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  const label = document.getElementById('drpLabel');
+  if (from && to) label.textContent = `📅 ${from} ~ ${to}`;
+  else if (from) label.textContent = `📅 ${from} ~`;
+  else if (to) label.textContent = `📅 ~ ${to}`;
+  else label.textContent = '📅 选择日期';
+}
+// Close date range on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.date-range-picker')) {
+    document.getElementById('drpDropdown').classList.remove('open');
+  }
+});
+
+// ════════════════════════════════════════════
+//  Column Settings
+// ════════════════════════════════════════════
+const colIndex = {
+  order: 2, customer: 3, channel: 4, depart: 5,
+  pid: 6, route: 7, owner: 8, butler: 9,
+  status: 10, amount: 11,
+};
+
+function toggleColSettings() {
+  document.getElementById('colSettings').classList.toggle('open');
+}
+
+function applyColSettings() {
+  const checks = document.querySelectorAll('.cs-item input');
+  // Map column to filter element
+  const filterMap = {
+    depart: 'dateRangeWrap',
+    route: 'routeFilter',
+    owner: 'ownerFilter',
+    butler: 'butlerFilter',
+    status: 'statusFilter',
+  };
+  checks.forEach(cb => {
+    const col = cb.closest('.cs-item').dataset.col;
+    const visible = cb.checked;
+    const idx = colIndex[col];
+    if (idx) {
+      // Hide th by nth-child
+      document.querySelectorAll('.wt th:nth-child(' + idx + ')').forEach(el => {
+        el.style.display = visible ? '' : 'none';
+      });
+      // Hide td by nth-child in each row
+      document.querySelectorAll('.wt tbody tr').forEach(tr => {
+        const td = tr.querySelector('td:nth-child(' + idx + ')');
+        if (td) td.style.display = visible ? '' : 'none';
+      });
+    }
+    // Hide corresponding filter (hide parent .filter div)
+    const filterId = filterMap[col];
+    if (filterId) {
+      const filterEl = document.getElementById(filterId);
+      if (filterEl) {
+        const parent = filterEl.closest('.filter') || filterEl;
+        parent.style.display = visible ? '' : 'none';
+      }
+    }
+  });
+  // Save to localStorage
+  const state = {};
+  checks.forEach(cb => { state[cb.closest('.cs-item').dataset.col] = cb.checked; });
+  localStorage.setItem('order_col_visibility', JSON.stringify(state));
+}
+
+// Restore column settings from localStorage
+function restoreColSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('order_col_visibility'));
+    if (!saved) return;
+    document.querySelectorAll('.cs-item input').forEach(cb => {
+      const col = cb.closest('.cs-item').dataset.col;
+      if (saved[col] !== undefined) cb.checked = saved[col];
+    });
+    applyColSettings();
+  } catch(e) {}
+}
+
+// Close col settings on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.col-settings') && !e.target.closest('.settings-btn')) {
+    document.getElementById('colSettings').classList.remove('open');
+  }
+});
+
+// ════════════════════════════════════════════
+//  Column Resize
+// ════════════════════════════════════════════
+const colKeys = ['cb','order','customer','channel','depart','pid','route','owner','butler','status','amount','actions'];
+
+function initColResize() {
+  document.querySelectorAll('.wt').forEach(table => {
+    const headers = table.querySelectorAll('thead th');
+    headers.forEach((th, i) => {
+      const key = colKeys[i];
+      if (!key || key === 'actions') return; // skip actions column
+      // Wrap content if not already wrapped
+      if (th.querySelector('.th-wrap')) return;
+      const wrap = document.createElement('span');
+      wrap.className = 'th-wrap';
+      while (th.firstChild) wrap.appendChild(th.firstChild);
+      th.appendChild(wrap);
+      // Add resize handle
+      const handle = document.createElement('span');
+      handle.className = 'resize-handle';
+      handle.dataset.col = key;
+      th.appendChild(handle);
+      handle.addEventListener('mousedown', onResizeStart);
+    });
+  });
+  // Restore saved widths
+  try {
+    const saved = JSON.parse(localStorage.getItem('order_col_widths'));
+    if (saved) {
+      Object.entries(saved).forEach(([key, w]) => {
+        document.querySelectorAll(`.resize-handle[data-col="${key}"]`).forEach(h => {
+          const th = h.parentElement;
+          // Set width on both th and corresponding col if exists
+          th.style.width = w + 'px';
+          const idx = colKeys.indexOf(key);
+          if (idx > 0) {
+            const table = th.closest('.wt');
+            // Apply to all rows' td:nth-child
+            table.querySelectorAll('tbody tr').forEach(tr => {
+              const td = tr.querySelector('td:nth-child(' + idx + ')');
+              if (td) td.style.width = w + 'px';
+            });
+          }
+        });
+      });
+    }
+  } catch(e) {}
+}
+
+let resizeCol = null;
+
+function onResizeStart(e) {
+  const handle = e.currentTarget;
+  const th = handle.parentElement;
+  const table = th.closest('.wt');
+  const idx = Array.from(table.querySelectorAll('thead th')).indexOf(th) + 1;
+  resizeCol = { th, table, idx, startX: e.clientX, startW: th.offsetWidth, handle };
+  handle.classList.add('active');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', onResizeEnd);
+  e.preventDefault();
+}
+
+function onResizeMove(e) {
+  if (!resizeCol) return;
+  const diff = e.clientX - resizeCol.startX;
+  let w = Math.max(40, resizeCol.startW + diff);
+  const idx = resizeCol.idx;
+  // Apply to ALL tables, not just the current one
+  document.querySelectorAll('.wt').forEach(table => {
+    const th = table.querySelector('thead th:nth-child(' + idx + ')');
+    if (th) th.style.width = w + 'px';
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const td = tr.querySelector('td:nth-child(' + idx + ')');
+      if (td) td.style.width = w + 'px';
+    });
+  });
+}
+
+function onResizeEnd() {
+  if (!resizeCol) return;
+  resizeCol.handle.classList.remove('active');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup', onResizeEnd);
+  // Save width
+  const key = colKeys[resizeCol.idx - 1];
+  if (key) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('order_col_widths') || '{}');
+      saved[key] = resizeCol.th.offsetWidth;
+      localStorage.setItem('order_col_widths', JSON.stringify(saved));
+    } catch(e) {}
+  }
+  resizeCol = null;
+}
+
+function applyFilters() {
+  const search = (document.getElementById('searchBox').value || '').trim().toLowerCase();
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo = document.getElementById('dateTo').value;
+  const owner = document.getElementById('ownerFilter').value;
+  const butler = document.getElementById('butlerFilter').value;
+  const route = document.getElementById('routeFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const paymentValues = getPaymentFilterValues();
+
+  let filtered = MOCK_ORDERS.filter(o => {
+    if (search) {
+      const haystack = [o.order_no, o.customer_name, o.customer_phone, o.product_name, o.channel].join(' ').toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    if (dateFrom && o.departure_date < dateFrom) return false;
+    if (dateTo && o.departure_date > dateTo) return false;
+    if (owner && (o.owner || '') !== owner) return false;
+    if (butler && (o.butler || '') !== butler) return false;
+    if (route && o.product_name !== route) return false;
+    if (status && o.order_status !== status) return false;
+    if (paymentValues.length && !paymentValues.includes(o.payment_status)) return false;
+    return true;
+  });
+
+  orders = filtered;
+  syncFiltersToUrl();
+  render();
+}
+
+function clearFilters() {
+  document.getElementById('searchBox').value = '';
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  document.getElementById('ownerFilter').value = '';
+  document.getElementById('butlerFilter').value = '';
+  document.getElementById('routeFilter').value = '';
+  document.getElementById('statusFilter').value = '';
+  // Reset multi-select payment
+  document.querySelectorAll('#paymentDropdown input[type="checkbox"]').forEach(cb => cb.checked = cb.value === '');
+  updatePaymentLabel();
+  orders = [...MOCK_ORDERS];
+  syncFiltersToUrl();
+  render();
+}
+
+// ════════════════════════════════════════════
+//  Multi-select (支付情况)
+// ════════════════════════════════════════════
+let msOpen = null;
+
+function toggleMs(name) {
+  const dd = document.getElementById(name + 'Dropdown');
+  if (msOpen && msOpen !== name) {
+    document.getElementById(msOpen + 'Dropdown').classList.remove('open');
+  }
+  dd.classList.toggle('open');
+  msOpen = dd.classList.contains('open') ? name : null;
+}
+
+function toggleMsAll(name) {
+  const allCb = document.querySelector(`#${name}Dropdown input[value=""]`);
+  const checked = allCb.checked;
+  document.querySelectorAll(`#${name}Dropdown input[type="checkbox"]`).forEach(cb => {
+    cb.checked = checked;
+  });
+  updatePaymentLabel();
+  applyFilters();
+}
+
+function applyMsFilter(name) {
+  const allCb = document.querySelector(`#${name}Dropdown input[value=""]`);
+  const others = document.querySelectorAll(`#${name}Dropdown input:not([value=""])`);
+  const allChecked = Array.from(others).every(cb => cb.checked);
+  allCb.checked = allChecked;
+  updatePaymentLabel();
+  applyFilters();
+}
+
+function updatePaymentLabel() {
+  const checked = document.querySelectorAll('#paymentDropdown input:not([value=""]):checked');
+  const label = document.getElementById('paymentLabel');
+  if (checked.length === 0 || document.querySelector('#paymentDropdown input[value=""]:checked')) {
+    label.textContent = '支付情况';
+  } else {
+    label.textContent = Array.from(checked).map(cb => cb.value).join(', ');
+  }
+}
+
+function getPaymentFilterValues() {
+  if (document.querySelector('#paymentDropdown input[value=""]:checked')) return [];
+  return Array.from(document.querySelectorAll('#paymentDropdown input:not([value=""]):checked')).map(cb => cb.value);
+}
+
+// Close multi-select on outside click
+document.addEventListener('click', e => {
+  if (msOpen && !e.target.closest('.multi-select')) {
+    document.getElementById(msOpen + 'Dropdown').classList.remove('open');
+    msOpen = null;
+  }
+});
+
+// ════════════════════════════════════════════
+//  Context Menu (右键菜单)
+// ════════════════════════════════════════════
+let cmOrder = null;
+
+function cmShow(e, orderId) {
+  e.preventDefault();
+  cmOrder = MOCK_ORDERS.find(o => o.id === orderId) || orders.find(o => o.id === orderId);
+  const menu = document.getElementById('contextMenu');
+  let x = e.clientX, y = e.clientY;
+  const mw = 200, mh = menu.scrollHeight || 240;
+  if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+  if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.classList.add('open');
+  return false;
+}
+
+function cmHide() {
+  document.getElementById('contextMenu').classList.remove('open');
+  cmOrder = null;
+}
+
+function cmCopy(mode) {
+  if (!cmOrder) return;
+  let text = '';
+  switch (mode) {
+    case 'id': text = cmOrder.order_no; break;
+    case 'customer': text = cmOrder.customer_name; break;
+    case 'route': text = cmOrder.product_name; break;
+    case 'id_customer_route': text = `${cmOrder.order_no}\t${cmOrder.customer_name}\t${cmOrder.product_name}`; break;
+  }
+  navigator.clipboard.writeText(text).then(() => { cmHide(); }).catch(() => { cmHide(); });
+}
+
+function cmCompare() {
+  if (!cmOrder) return;
+  const id = cmOrder.id; cmHide();
+  window.open(`/compare/${id}`, '_blank');
+}
+
+function cmOpenVbk() {
+  if (!cmOrder) return; cmHide();
+  window.open(`https://vbooking.ctrip.com/order/orderDetail?orderId=${cmOrder.order_no}`, '_blank');
+}
+
+function cmOpenEt() {
+  if (!cmOrder) return;
+  const orderNo = cmOrder.order_no; cmHide();
+  fetch('/api/et818/find-by-order-no', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ order_no: orderNo })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok && data.matches && data.matches.length) {
+      window.open(data.matches[0].detail_url, '_blank');
+    } else { alert('未在 ET818 中找到该订单号'); }
+  })
+  .catch(() => alert('查询 ET818 失败'));
+}
+
+function cmRefresh() {
+  if (!cmOrder) return;
+  const orderId = cmOrder.id;
+  const orderNo = cmOrder.order_no;
+  cmHide();
+  // Show status feedback
+  const status = document.getElementById('lookupStatus');
+  status.className = 'lookup-status';
+  status.textContent = `正在刷新订单 ${orderNo}...`;
+  fetch(`/api/orders/${orderId}/sync-vbk-detail-from-browser`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ order_no: orderNo, list_kind: 'auto', sync_if_missing: true })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      status.className = 'lookup-status ok';
+      status.textContent = `订单 ${orderNo} 已刷新`;
+      // TODO: reload from API when real data is connected
+      setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 3000);
+    } else {
+      status.className = 'lookup-status err';
+      status.textContent = data.detail || '刷新失败';
+    }
+  })
+  .catch(err => {
+    status.className = 'lookup-status err';
+    status.textContent = '刷新失败: ' + err.message;
+  });
+}
+
+// Close context menu on outside click or Escape
+document.addEventListener('click', e => { if (!e.target.closest('.cm')) cmHide(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cmHide(); });
+
+// ════════════════════════════════════════════
+//  Refresh All
+// ════════════════════════════════════════════
+function refreshAllOrders() {
+  const btn = document.getElementById('refreshAllBtn');
+  if (btn.disabled) return;
+  const list = orders;
+  if (!list.length) { alert('没有可刷新的订单'); return; }
+
+  btn.disabled = true;
+  btn.textContent = `🔄 刷新中 0/${list.length}`;
+
+  let done = 0, failed = 0;
+  const status = document.getElementById('lookupStatus');
+
+  function next(i) {
+    if (i >= list.length) {
+      btn.disabled = false;
+      const msg = failed ? `全部刷新完成，成功 ${done}，失败 ${failed}` : `全部刷新完成，共 ${done} 单`;
+      btn.textContent = '🔄 全部刷新';
+      status.className = failed ? 'lookup-status err' : 'lookup-status ok';
+      status.textContent = msg;
+      setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 5000);
+      return;
+    }
+    const o = list[i];
+    btn.textContent = `🔄 刷新中 ${i+1}/${list.length}`;
+    fetch(`/api/orders/${o.id}/sync-vbk-detail-from-browser`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ order_no: o.order_no, list_kind: 'auto', sync_if_missing: true })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) done++; else failed++;
+      next(i + 1);
+    })
+    .catch(() => { failed++; next(i + 1); });
+  }
+  next(0);
+}
+
+// ════════════════════════════════════════════
+//  Render
+// ════════════════════════════════════════════
+function render() {
+  const container = document.getElementById('tableContainer');
+
+  // Stats
+  updateStats();
+
+  // Group by selected field
+  const groups = {};
+  const groupLabelMap = {
+    departure_date: '出发日期',
+    order_date: '下单日期',
+    product_name: '路线',
+    owner: '负责人',
+    butler: '管家',
+  };
+  orders.forEach(o => {
+    let key = o[groupField] || '未设置';
+    if (groupField === 'owner' || groupField === 'butler') {
+      key = o[groupField] || '未设置';
+    }
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(o);
+  });
+  // Sort keys: dates sort chronologically, others alphabetically
+  const isDateField = groupField === 'departure_date' || groupField === 'order_date';
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === '未设置') return 1;
+    if (b === '未设置') return -1;
+    if (isDateField) return a.localeCompare(b);
+    return a.localeCompare(b, 'zh');
+  });
+
+  // Check empty
+  if (!sortedKeys.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📭</div>
+        <div class="title">当前筛选结果为空</div>
+        <div class="desc">试试修改搜索词或清除筛选条件</div>
+      </div>`;
+    document.getElementById('totalCount').textContent = '0';
+    return;
+  }
+
+  document.getElementById('totalCount').textContent = orders.length;
+
+  let html = '';
+
+  if (groupField === 'none') {
+    // Flat list — no groups
+    const totalAmount = orders.reduce((s, o) => {
+      if (o.payment_status === '已支付') return s + (o.total_amount || 0);
+      if (o.payment_status === '部分支付') return s + (o.paid_amount || 0);
+      return s;
+    }, 0);
+    html = `
+      <div class="group">
+        <div class="group-body" style="display:block">
+          <table class="wt flat">
+            <thead>
+              <tr>
+                <th class="cb"><input type="checkbox" id="checkAllFlat" onchange="document.querySelectorAll('.row-cb').forEach(c=>c.checked=this.checked)" /></th>
+                <th class="col-order">订单号</th>
+                <th class="col-customer">客户</th>
+                <th class="col-channel">渠道</th>
+                <th class="col-depart">出发日期<br/>下单日期</th>
+                <th class="col-pid">ID</th>
+                <th style="width:34%">线路</th>
+                <th class="col-owner">负责人</th>
+                <th class="col-butler">管家</th>
+                <th class="col-status">状态</th>
+                <th class="col-amount">金额</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${orders.map(o => renderRow(o)).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  } else {
+    // Grouped by field
+    sortedKeys.forEach((key, gi) => {
+    const items = groups[key];
+    const groupTotal = items.reduce((s, o) => {
+      if (o.payment_status === '已支付') return s + (o.total_amount || 0);
+      if (o.payment_status === '部分支付') return s + (o.paid_amount || 0);
+      return s;
+    }, 0);
+    // Consistent color by key hash (same key = same color across renders)
+    const colorIdx = hashStr(key) % 10;
+
+    html += `
+      <div class="group">
+        <div class="gh gh-${colorIdx}" onclick="toggleGroup(this)">
+          <span class="arrow open">▶</span>
+          <span class="date">${esc(key)}</span>
+          <span class="count">${items.length}单</span>
+          <span class="group-stats">
+            <span class="gs-item">💰 ${fmtMoney(groupTotal)}</span>
+          </span>
+          <span class="group-total" style="display:none"></span>
+        </div>
+        <div class="group-body" style="display:block">
+          <table class="wt">
+            <thead>
+              <tr>
+                <th class="cb"><input type="checkbox" onchange="toggleAll(this,'${key}')" /></th>
+                <th class="col-order">订单号</th>
+                <th class="col-customer">客户</th>
+                <th class="col-channel">渠道</th>
+                <th class="col-depart">出发日期<br/>下单日期</th>
+                <th class="col-pid">ID</th>
+                <th style="width:34%">线路</th>
+                <th class="col-owner">负责人</th>
+                <th class="col-butler">管家</th>
+                <th class="col-status">状态</th>
+                <th class="col-amount">金额</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map(o => renderRow(o)).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  });  // end forEach
+  }  // end else (grouped)
+
+  container.innerHTML = html;
+  restoreColSettings();
+  initColResize();
+}
+
+function changeGroupBy(value) {
+  groupField = value;
+  syncFiltersToUrl();
+  render();
+}
+
+function renderRow(o) {
+  const statusBadge = statusLabel(o.order_status);
+  const paymentBadge = paymentLabel(o.payment_status);
+
+  const isCancelled = o.payment_status === '已退款' || o.payment_status === '取消支付' || o.order_status === '已取消' || o.order_status === '已关闭';
+  const rowClass = isCancelled ? 'cancelled' : '';
+
+  return `
+    <tr data-id="${o.id}" class="${rowClass}" oncontextmenu="return cmShow(event, ${o.id})">
+      <td class="cb"><input type="checkbox" class="row-cb" /></td>
+      <td class="mono">${o.order_no}</td>
+      <td>
+        <div class="customer">${esc(o.customer_name)}
+          <span class="phone">${esc(o.customer_phone || '')}</span>
+        </div>
+      </td>
+      <td><span class="badge badge-green"><span class="dot"></span>${esc(o.channel)}</span></td>
+      <td class="mono" style="font-size:12px;line-height:1.6">
+        <div>${o.departure_date}</div>
+        <div style="color:var(--tm);font-size:11px">${o.order_date || '—'}</div>
+      </td>
+      <td><a class="pid-link" href="https://vacations.ctrip.com/travel/detail/p${o.product_id}.html" target="_blank" title="打开携程产品页">${o.product_id || '—'}</a></td>
+      <td style="font-size:12px;color:var(--ts);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(o.product_name)}">${esc(o.product_name)}</td>
+      <td><span class="editable-text" onclick="editField(this,${o.id},'owner')">${o.owner ? esc(o.owner) : '<span class="placeholder">—</span>'}</span></td>
+      <td><span class="editable-text" onclick="editField(this,${o.id},'butler')">${o.butler ? esc(o.butler) : '<span class="placeholder">—</span>'}</span></td>
+      <td>
+        <span class="badge ${paymentBadge.cls}"><span class="dot"></span>${paymentBadge.label}</span>
+        <span class="badge ${statusBadge.cls}" style="margin-left:4px"><span class="dot"></span>${statusBadge.label}</span>
+      </td>
+      <td><span class="amount ${o.payment_status === '已支付' ? 'paid' : 'unpaid'}">${fmtMoney(o.total_amount)}</span></td>
+      <td>
+        <div class="actions">
+          <a class="link" href="/compare/${o.id}" target="_blank" title="双栏对比">详情</a>
+        </div>
+      </td>
+    </tr>`;
+}
+
+// ════════════════════════════════════════════
+//  Group toggle
+// ════════════════════════════════════════════
+function toggleGroup(el) {
+  const body = el.nextElementSibling;
+  const arrow = el.querySelector('.arrow');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    arrow.classList.add('open');
+  } else {
+    body.style.display = 'none';
+    arrow.classList.remove('open');
+  }
+}
+
+// ════════════════════════════════════════════
+//  Stats
+// ════════════════════════════════════════════
+function updateStats() {
+  const total = orders.length;
+  const paid = orders.filter(o => o.payment_status === '已支付').length;
+  const unpaid = orders.filter(o => o.payment_status === '未支付' || o.payment_status === '部分支付').length;
+  const confirmed = orders.filter(o => o.order_status === '已确认').length;
+  const pending = orders.filter(o => o.order_status === '待确认').length;
+  const totalAmount = orders.reduce((s, o) => {
+    if (o.payment_status === '已支付') return s + (o.total_amount || 0);
+    if (o.payment_status === '部分支付') return s + (o.paid_amount || 0);
+    return s;
+  }, 0);
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statPaid').textContent = paid;
+  document.getElementById('statUnpaid').textContent = unpaid;
+  document.getElementById('statConfirmed').textContent = confirmed;
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statAmount').textContent = fmtMoney(totalAmount);
+}
+
+// ════════════════════════════════════════════
+//  Helpers
+// ════════════════════════════════════════════
+function statusLabel(s) {
+  if (s === '已确认') return { label: '已确认', cls: 'badge-blue' };
+  if (s === '待确认') return { label: '待确认', cls: 'badge-amber' };
+  if (s === '已出行') return { label: '已出行', cls: 'badge-green' };
+  if (s === '已完成') return { label: '已完成', cls: 'badge-green' };
+  if (s === '已取消' || s === '已关闭') return { label: s, cls: 'badge-gray' };
+  return { label: s, cls: 'badge-gray' };
+}
+
+function paymentLabel(s) {
+  if (s === '已支付') return { label: '已支付', cls: 'badge-green' };
+  if (s === '部分支付') return { label: '部分', cls: 'badge-amber' };
+  if (s === '未支付') return { label: '未支付', cls: 'badge-gray' };
+  if (s === '已退款' || s === '取消支付') return { label: s, cls: 'badge-gray' };
+  return { label: s, cls: 'badge-gray' };
+}
+
+function fmtMoney(v) {
+  if (v === null || v === undefined) return '—';
+  return '¥' + Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Simple string hash for consistent color assignment
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h) + s.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+}
+
+function toggleAll(cb, date) {
+  document.querySelectorAll(`.group:has(.gh .date:contains("${date}")) .row-cb`).forEach(c => c.checked = cb.checked);
+}
+
+// Note inline edit (placeholder)
+function editNote(el, orderId) {
+  const current = el.textContent === '添加备注' ? '' : el.textContent;
+  const input = document.createElement('input');
+  input.className = 'note-input';
+  input.value = current;
+  input.placeholder = '输入备注...';
+  input.addEventListener('blur', () => {
+    // TODO: save to API
+    el.parentNode.replaceChild(el, input);
+    if (input.value.trim()) {
+      el.textContent = input.value.trim();
+      el.className = 'editable-note';
+    } else {
+      el.textContent = '添加备注';
+      el.className = 'editable-note empty';
+    }
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { input.value = current; input.blur(); }
+  });
+  el.parentNode.replaceChild(input, el);
+  input.focus();
+  input.select();
+}
+
+// Owner / butler inline edit
+function editField(el, orderId, field) {
+  const span = el.querySelector('.placeholder') ? el.querySelector('.placeholder') : el;
+  const current = span === el ? el.textContent.trim() : '';
+  const input = document.createElement('input');
+  input.className = 'note-input';
+  input.style.width = '60px';
+  input.value = current;
+  input.placeholder = field === 'owner' ? '负责人' : '管家';
+  input.addEventListener('blur', () => {
+    const order = MOCK_ORDERS.find(o => o.id === orderId);
+    if (order) order[field] = input.value.trim();
+    render();
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { input.value = current; input.blur(); }
+  });
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+  input.select();
+}
+
+// Polyfill for :contains (used by toggleAll)
+document.querySelectorAll = (function(orig) {
+  return function(sel) {
+    if (sel.includes(':contains(')) {
+      const parts = sel.split(/(:contains\([^)]+\))/g);
+      let base = parts[0];
+      for (let i = 1; i < parts.length; i += 2) {
+        const cond = parts[i];
+        const text = cond.match(/:contains\("([^"]+)"\)/)?.[1];
+        if (text) {
+          const els = orig.call(this, base);
+          const filtered = [];
+          els.forEach(el => {
+            if (el.textContent.includes(text)) filtered.push(el);
+          });
+          return filtered;
+        }
+        if (parts[i+1]) base += parts[i+1];
+      }
+    }
+    return orig.call(this, sel);
+  };
+})(document.querySelectorAll.bind(document));
+</script>
+</body>
+</html>
