@@ -53,6 +53,7 @@ class WorkspaceFieldPatch(BaseModel):
     route_name: Optional[str] = None
     owner_id: Optional[int] = None
     customer_note: Optional[str] = None
+    butler: Optional[str] = None
 
 
 class Et818AutofillTarget(BaseModel):

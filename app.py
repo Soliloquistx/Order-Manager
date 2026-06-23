@@ -8,6 +8,7 @@ from database import init_db
 from et818_bridge import Et818BridgeError
 from et818_service import (
     build_et818_payload_response,
+    check_and_update_et818_status,
     et818_autofill_main,
     et818_autofill_no_save,
     et818_autofill_pickup,
@@ -25,6 +26,7 @@ from et818_service import (
 from repository import (
     add_note,
     create_order,
+    delete_order,
     export_orders_csv,
     get_order,
     get_order_by_order_no,
@@ -67,7 +69,7 @@ def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    html = (TEMPLATES_DIR / "index.html").read_text(encoding="utf-8")
+    html = (TEMPLATES_DIR / "new-index.html").read_text(encoding="utf-8")
     return HTMLResponse(content=html)
 
 
@@ -187,6 +189,18 @@ def api_patch_workspace(order_id: int, payload: WorkspaceFieldPatch):
     try:
         patch_workspace_fields(order_id, payload.model_dump(exclude_none=True))
         return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/orders/{order_id}")
+def api_delete_order(order_id: int):
+    order = get_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    try:
+        delete_order(order_id)
+        return {"ok": True, "order_id": order_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -513,12 +527,58 @@ def api_et818_submit_after_confirm(order_id: int):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/et818/save-session")
+def api_et818_save_session():
+    """Grab 易途 cookies + template from CDP Chrome and save to disk."""
+    from et818_bridge import ChromeEt818Bridge
+    try:
+        bridge = ChromeEt818Bridge()
+        return bridge.save_session_to_disk()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)[:200])
+
+
+@app.post("/api/et818/open-login")
+def api_et818_open_login():
+    """Open 易途 login page in debug Chrome for manual login."""
+    from et818_bridge import ChromeEt818Bridge, Et818BridgeError
+    try:
+        bridge = ChromeEt818Bridge()
+        return bridge.open_login_page()
+    except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)[:200])
+
+
+@app.get("/api/et818/session-status")
+def api_et818_session_status():
+    """Check if a saved 易途 session exists."""
+    from et818_bridge import ChromeEt818Bridge
+    saved = ChromeEt818Bridge.load_session_from_disk()
+    if saved:
+        return {"ok": True, "has_session": True, "saved_at": saved.get("saved_at", "unknown")}
+    return {"ok": True, "has_session": False}
+
+
 @app.post("/api/et818/find-by-order-no")
 def api_et818_find_by_order_no(payload: Et818OrderLookup):
     try:
         matches = find_et818_order_by_order_no(payload.order_no)
         return {"ok": True, "matches": matches}
     except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/orders/{order_id}/check-et818-status")
+def api_check_et818_status(order_id: int):
+    try:
+        return check_and_update_et818_status(order_id)
+    except HTTPException:
+        raise
+    except Et818BridgeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -553,6 +613,16 @@ def api_et818_open_by_order_no(payload: Et818OrderLookup):
     except Et818BridgeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@app.get("/api/cdp/status")
+def cdp_status():
+    import urllib.request
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=3) as resp:
+            data = json.loads(resp.read())
+            return {"ok": True, "connected": True, "browser": data.get("Browser", "unknown")}
+    except Exception as e:
+        return {"ok": True, "connected": False, "error": str(e)[:200]}
 
 @app.get("/api/health")
 def health():

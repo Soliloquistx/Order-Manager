@@ -169,8 +169,9 @@ def create_order(data: dict[str, Any]) -> int:
               total_amount, paid_amount, currency,
               payment_status, order_status, follow_status, priority,
               owner_id, next_follow_up_at, last_follow_up_at, latest_note_summary,
+              product_id, butler, et818_status, et_note,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
             (
                 data["order_no"], data.get("external_order_no") or None, data["product_name"], data.get("route_name") or None,
@@ -180,6 +181,7 @@ def create_order(data: dict[str, Any]) -> int:
                 data.get("total_amount"), data.get("paid_amount") or 0, data.get("currency") or "CNY",
                 data["payment_status"], data["order_status"], data["follow_status"], data.get("priority") or "普通",
                 data.get("owner_id") or 1, data.get("next_follow_up_at") or None, None, None,
+                data.get("product_id") or None, data.get("butler") or None, data.get("et818_status") or None, data.get("et_note") or None,
                 now, now,
             ),
         )
@@ -225,7 +227,7 @@ def update_order(order_id: int, data: dict[str, Any]) -> None:
               customer_name=?, customer_phone=?, backup_contact=?, customer_note=?,
               departure_date=?, return_date=?, adult_count=?, child_count=?, room_count=?,
               total_amount=?, paid_amount=?, currency=?, payment_status=?, order_status=?, follow_status=?,
-              priority=?, owner_id=?, next_follow_up_at=?, updated_at=?
+              priority=?, owner_id=?, next_follow_up_at=?, product_id=?, butler=?, et818_status=?, et_note=?, updated_at=?
             WHERE id=?
             ''',
             (
@@ -235,7 +237,9 @@ def update_order(order_id: int, data: dict[str, Any]) -> None:
                 data["departure_date"], data.get("return_date") or None, data.get("adult_count") or 1, data.get("child_count") or 0, data.get("room_count"),
                 data.get("total_amount"), data.get("paid_amount") or 0, data.get("currency") or "CNY",
                 data["payment_status"], data["order_status"], data["follow_status"], data.get("priority") or "普通",
-                data.get("owner_id") or 1, data.get("next_follow_up_at") or None, now, order_id,
+                data.get("owner_id") or 1, data.get("next_follow_up_at") or None,
+                data.get("product_id") or None, data.get("butler") or None, data.get("et818_status") or None, data.get("et_note") or None,
+                now, order_id,
             ),
         )
         create_log(conn, order_id, "update_order", description="编辑订单", created_by=data.get("owner_id") or 1)
@@ -272,6 +276,7 @@ def patch_workspace_fields(order_id: int, payload: dict[str, Any], created_by: i
         "route_name": "路线",
         "owner_id": "负责人",
         "customer_note": "备注",
+        "butler": "管家",
     }
     updates = []
     params: list[Any] = []
@@ -488,6 +493,15 @@ def replace_order_pickup_dropoff(order_id: int, items: list[dict[str, Any]]) -> 
                 ),
             )
 
+
+
+def delete_order(order_id: int) -> None:
+    with db_cursor() as conn:
+        # Delete related records first
+        for table in ["order_notes", "order_logs", "order_travellers", "order_pickup_dropoff"]:
+            conn.execute(f"DELETE FROM {table} WHERE order_id = ?", (order_id,))
+        # Delete the order itself
+        conn.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
 
 def get_vbk_detail_snapshot(order_no: str) -> dict[str, Any] | None:

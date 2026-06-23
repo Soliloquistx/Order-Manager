@@ -25,6 +25,22 @@ def db_cursor():
         conn.close()
 
 
+def migrate_db() -> None:
+    """Add missing columns to existing tables (idempotent, wrapped in try/except)."""
+    columns = [
+        ("orders", "product_id", "TEXT"),
+        ("orders", "butler", "TEXT"),
+        ("orders", "et818_status", "TEXT DEFAULT '未处理'"),
+        ("orders", "et_note", "TEXT DEFAULT ''"),
+    ]
+    for table, column, col_def in columns:
+        try:
+            with db_cursor() as conn:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+
 def init_db() -> None:
     with db_cursor() as conn:
         conn.executescript(
@@ -44,6 +60,10 @@ def init_db() -> None:
               external_order_no TEXT,
               product_name TEXT NOT NULL,
               route_name TEXT,
+              product_id TEXT,
+              butler TEXT,
+              et818_status TEXT DEFAULT '未处理',
+              et_note TEXT DEFAULT '',
               channel TEXT NOT NULL,
               source_platform TEXT,
               customer_name TEXT NOT NULL,
@@ -184,3 +204,5 @@ def init_db() -> None:
                 "INSERT INTO users (username, display_name, role, created_at) VALUES (?, ?, ?, ?)",
                 ("feiyu", "飞鱼", "admin", utc_now_str()),
             )
+
+    migrate_db()

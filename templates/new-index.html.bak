@@ -634,8 +634,6 @@ body.dark .cm { box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
           </select>
         </div>
         <span class="refresh-all-btn" id="refreshAllBtn" onclick="refreshAllOrders()" title="刷新全部订单数据">🔄 全部刷新</span>
-        <span class="refresh-all-btn" id="saveSessionBtn" onclick="loginAndSaveEt()" title="打开易途登录页，登录后自动保存">🔐 登录易途</span>
-        <span class="settings-btn" id="sessionStatus" style="font-size:12px;color:var(--tm)"></span>
         <span class="settings-btn" onclick="toggleColSettings()" title="列设置">⚙️</span>
         <div class="meta">共 <strong id="totalCount">—</strong> 单</div>
       </div>
@@ -726,7 +724,7 @@ body.dark .cm { box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
       <span class="stat"><span class="dot blue"></span> <span class="num" id="statConfirmed">-</span> 已确认</span>
       <span class="stat"><span class="dot gray"></span> <span class="num" id="statPending">-</span> 待确认</span>
       <span class="sep"></span>
-      <span class="stat"><span class="dot green"></span> <span class="num" id="statEtDone">-</span> 易途 已处理</span>
+      <span class="stat"><span class="dot green"></span> <span class="num" id="statEtDone">-</span> ET818 已处理</span>
       <span class="total-amount">总金额 <span class="num" id="statAmount">¥0</span></span>
     </div>
 
@@ -745,161 +743,77 @@ body.dark .cm { box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
     <div class="sep"></div>
     <button class="cmi" onclick="cmCompare()"><span class="ico">🔍</span> 查看对比</button>
     <button class="cmi" onclick="cmOpenVbk()"><span class="ico">🌐</span> VBK 订单页</button>
-    <button class="cmi" onclick="cmOpenEt()"><span class="ico">📊</span> 易途 详情页</button>
-    <button class="cmi" onclick="cmCheckEtStatus()"><span class="ico">🔍</span> 检查易途状态</button>
+    <button class="cmi" onclick="cmOpenEt()"><span class="ico">📊</span> ET 详情页</button>
     <div class="sep"></div>
     <button class="cmi" onclick="cmRefresh()"><span class="ico">🔄</span> 刷新数据</button>
-    <div class="sep"></div>
-    <button class="cmi" onclick="cmDelete()" style="color:var(--r0)"><span class="ico">🗑️</span> 删除订单</button>
   </div>
 
 <script>
 // ════════════════════════════════════════════
-//  Global State — loaded from API
+//  Mock Data — 后续替换为 API 调用
 // ════════════════════════════════════════════
-let apiOrders = [];
-let statuses = [];
-let orders = [];
-let groupField = 'order_date';
+const MOCK_ORDERS = [
+  { id:15, order_no:'1128146497465001', customer_name:'傅嘉程', customer_phone:'134****8646',
+    channel:'携程', product_name:'兰州+西宁+青海湖+敦煌+嘉峪关10日9晚', product_id:'31044867',
+    departure_date:'2026-06-21', order_date:'2026-06-10', adult_count:1, child_count:0, total_amount:5372.81, paid_amount:5372.81,
+    payment_status:'已支付', order_status:'已确认', follow_status:'已解决', et818_status:'已提交', customer_note:'优惠100/人', et_note:'已对接地接，优惠已确认',
+    owner:'李明强', butler:'王芳' },
+  { id:14, order_no:'1128146497232215', customer_name:'张美华', customer_phone:'138****5521',
+    channel:'携程', product_name:'云南昆明+大理+丽江+泸沽湖8日7晚', product_id:'29867543',
+    departure_date:'2026-06-21', order_date:'2026-06-08', adult_count:2, child_count:0, total_amount:8960.00, paid_amount:8960.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'待跟进', et818_status:'已提交', customer_note:'', et_note:'',
+    owner:'李明强', butler:'' },
+  { id:16, order_no:'1128146497333394', customer_name:'李明', customer_phone:'186****3301',
+    channel:'抖音', product_name:'甘南+扎尕那+若尔盖+莲宝叶则5日4晚', product_id:'31567221',
+    departure_date:'2026-06-21', order_date:'2026-06-15', adult_count:1, child_count:1, total_amount:4280.50, paid_amount:4280.50,
+    payment_status:'已支付', order_status:'已确认', follow_status:'跟进中', et818_status:'已填写', customer_note:'需确认门票政策', et_note:'景区门票政策待核实',
+    owner:'', butler:'刘静' },
+  { id:17, order_no:'1128146497500123', customer_name:'王磊', customer_phone:'139****7722',
+    channel:'微信', product_name:'三亚+蜈支洲+天堂森林公园5日4晚', product_id:'28765431',
+    departure_date:'2026-06-22', order_date:'2026-06-12', adult_count:2, child_count:1, total_amount:7250.00, paid_amount:7250.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'已解决', et818_status:'已提交', customer_note:'加床', et_note:'已安排加床',
+    owner:'陈晓', butler:'王芳' },
+  { id:18, order_no:'1128146497500456', customer_name:'陈雪', customer_phone:'150****6688',
+    channel:'携程', product_name:'桂林+阳朔+龙脊梯田4日3晚', product_id:'30214567',
+    departure_date:'2026-06-22', order_date:'2026-06-18', adult_count:2, child_count:0, total_amount:3840.00,
+    payment_status:'未支付', order_status:'待确认', follow_status:'待跟进', et818_status:'未处理', customer_note:'', et_note:'',
+    owner:'李明强', butler:'' },
+  { id:19, order_no:'1128146497500789', customer_name:'赵建国', customer_phone:'137****4499',
+    channel:'携程', product_name:'成都+九寨沟+黄龙+都江堰6日5晚', product_id:'32567890',
+    departure_date:'2026-06-23', order_date:'2026-06-05', adult_count:4, child_count:0, total_amount:15200.00, paid_amount:8000.00,
+    payment_status:'部分支付', order_status:'已确认', follow_status:'跟进中', et818_status:'已填写', customer_note:'分两间房', et_note:'已预留两间标间',
+    owner:'李明强', butler:'刘静' },
+  { id:20, order_no:'1128146497501011', customer_name:'刘芳', customer_phone:'158****3355',
+    channel:'抖音', product_name:'西安+华山+兵马俑+大雁塔4日3晚', product_id:'27890123',
+    departure_date:'2026-06-23', order_date:'2026-06-20', adult_count:1, child_count:0, total_amount:2980.00,
+    payment_status:'未支付', order_status:'待确认', follow_status:'待跟进', et818_status:'未处理', customer_note:'', et_note:'',
+    owner:'', butler:'' },
+  { id:21, order_no:'1128146497501314', customer_name:'孙伟', customer_phone:'136****1177',
+    channel:'小红书', product_name:'厦门+鼓浪屿+云水谣+火山岛5日4晚', product_id:'33456712',
+    departure_date:'2026-06-24', order_date:'2026-06-14', adult_count:2, child_count:1, total_amount:5670.00, paid_amount:5670.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'已解决', et818_status:'已提交', customer_note:'儿童不占床', et_note:'儿童不占床已备注',
+    owner:'陈晓', butler:'王芳' },
+  { id:22, order_no:'1128146497501617', customer_name:'周婷', customer_phone:'152****8833',
+    channel:'携程', product_name:'张家界+天门山+凤凰古城5日4晚', product_id:'31234567',
+    departure_date:'2026-06-24', order_date:'2026-06-19', adult_count:1, child_count:0, total_amount:3350.00,
+    payment_status:'未支付', order_status:'待确认', follow_status:'待跟进', et818_status:'未处理', customer_note:'', et_note:'',
+    owner:'李明强', butler:'' },
+  { id:23, order_no:'1128146497501920', customer_name:'吴强', customer_phone:'182****2266',
+    channel:'微信', product_name:'拉萨+林芝+羊卓雍措+纳木错8日7晚', product_id:'34567890',
+    departure_date:'2026-06-25', order_date:'2026-06-01', adult_count:2, child_count:0, total_amount:12800.00, paid_amount:12800.00,
+    payment_status:'已支付', order_status:'已确认', follow_status:'跟进中', et818_status:'已提交', customer_note:'已付全款，需安排接送', et_note:'全款已付，接送已安排',
+    owner:'陈晓', butler:'刘静' },
+];
 
-// ── Computed unique values (from apiOrders) ──
-const ownerOptions = () => [...new Set(apiOrders.map(o => o.owner).filter(Boolean))].sort();
-const butlerOptions = () => [...new Set(apiOrders.map(o => o.butler).filter(Boolean))].sort();
+// ── Extracted unique values ──
+const statuses = [...new Set(MOCK_ORDERS.map(o => o.order_status))].sort();
 
-// ════════════════════════════════════════════
-//  API — load orders from backend
-// ════════════════════════════════════════════
-async function loadFromApi() {
-  try {
-    const resp = await fetch('/api/orders');
-    const data = await resp.json();
-    // Normalize backend fields → frontend fields
-    apiOrders = (data.orders || []).map(o => ({
-      ...o,
-      owner: o.owner_name || '',
-      order_date: (o.created_at || o.order_date || '').slice(0, 10),
-      product_id: o.product_id || '',
-      butler: o.butler || '',
-      et818_status: o.et818_status || '未处理',
-      et_note: o.et_note || '',
-    }));
-    // Compute statuses from actual data
-    statuses = [...new Set(apiOrders.map(o => o.order_status).filter(Boolean))].sort();
-    // Populate dropdowns
-    populateSelectWithCount('ownerFilter', apiOrders, 'owner', '销售');
-    populateSelectWithCount('butlerFilter', apiOrders, 'butler', '管家');
-    populateSelectWithCount('routeFilter', apiOrders, 'route_name', '路线');
-    populateSelectWithCount('statusFilter', apiOrders, 'order_status');
-    populateSelectWithCount('et818StatusFilter', apiOrders, 'et818_status', '易途状态');
-    // Restore filters from URL, then apply
-    restoreFiltersFromUrl();
-    applyFilters();
-  } catch (err) {
-    console.error('Failed to load orders from API:', err);
-    document.getElementById('tableContainer').innerHTML = `
-      <div class="empty-state">
-        <div class="icon">⚠️</div>
-        <div class="title">加载失败</div>
-        <div class="desc">无法从服务器获取订单数据: ${esc(err.message)}</div>
-      </div>`;
-  } finally {
-    // Hide loading state
-    const ls = document.getElementById('loadingState');
-    if (ls) ls.style.display = 'none';
-  }
-}
+let orders = [...MOCK_ORDERS];
+let groupField = 'departure_date';
 
-// ════════════════════════════════════════════
-//  易途 Session 管理
-// ════════════════════════════════════════════
-function loginAndSaveEt() {
-  const btn = document.getElementById('saveSessionBtn');
-  const status = document.getElementById('sessionStatus');
-  btn.disabled = true;
-  btn.textContent = '⏳ 打开登录页...';
-
-  // Step 1: Open login page in debug Chrome
-  fetch('/api/et818/open-login', { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        btn.textContent = '🔑 请在调试 Chrome 中登录易途，然后点此保存';
-        btn.disabled = false;
-        status.textContent = '💡 输入账号密码验证码，点登录';
-        status.style.color = 'var(--a)';
-        // Change button to save mode
-        btn.onclick = saveEtSession;
-        setTimeout(() => {
-          btn.textContent = '🔐 登录易途';
-          btn.onclick = loginAndSaveEt;
-          btn.disabled = false;
-        }, 60000); // 60s timeout, back to login mode
-      } else {
-        btn.textContent = '❌ 打开失败';
-        status.textContent = data.detail || '打开登录页失败';
-        status.style.color = 'var(--r0)';
-        setTimeout(resetLoginBtn, 3000);
-      }
-    })
-    .catch(err => {
-      btn.textContent = '❌ 失败';
-      status.textContent = err.message;
-      status.style.color = 'var(--r0)';
-      setTimeout(resetLoginBtn, 3000);
-    });
-}
-
-function resetLoginBtn() {
-  const btn = document.getElementById('saveSessionBtn');
-  btn.textContent = '🔐 登录易途';
-  btn.onclick = loginAndSaveEt;
-  btn.disabled = false;
-}
-
-function saveEtSession() {
-  const btn = document.getElementById('saveSessionBtn');
-  const status = document.getElementById('sessionStatus');
-  btn.disabled = true;
-  btn.textContent = '⏳ 保存中...';
-  fetch('/api/et818/save-session', { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        btn.textContent = '✅ 已保存';
-        status.textContent = `📅 ${data.saved_at ? new Date(data.saved_at).toLocaleString() : ''}`;
-        status.style.color = 'var(--g)';
-        btn.onclick = resetLoginBtn;
-        setTimeout(resetLoginBtn, 3000);
-      } else {
-        btn.textContent = '❌ 失败';
-        status.textContent = data.detail || '保存失败';
-        status.style.color = 'var(--r0)';
-        setTimeout(resetLoginBtn, 3000);
-      }
-    })
-    .catch(err => {
-      btn.textContent = '❌ 失败';
-      status.textContent = err.message;
-      status.style.color = 'var(--r0)';
-      setTimeout(resetLoginBtn, 3000);
-    });
-}
-
-function checkEtSession() {
-  fetch('/api/et818/session-status')
-    .then(r => r.json())
-    .then(data => {
-      const status = document.getElementById('sessionStatus');
-      if (data.has_session) {
-        status.textContent = `🔐 易途已保存 ${data.saved_at ? '(' + new Date(data.saved_at).toLocaleString() + ')' : ''}`;
-        status.style.color = 'var(--g)';
-      } else {
-        status.textContent = '⚠️ 未保存易途登录态';
-        status.style.color = 'var(--o)';
-      }
-    })
-    .catch(() => {});
-}
+// ── Unique values for dropdowns ──
+const ownerOptions = [...new Set(MOCK_ORDERS.map(o => o.owner).filter(Boolean))].sort();
+const butlerOptions = [...new Set(MOCK_ORDERS.map(o => o.butler).filter(Boolean))].sort();
 
 // ════════════════════════════════════════════
 //  Lookup & Add Order
@@ -934,9 +848,9 @@ function lookupAndAddOrder() {
     input.value = '';
     // 打开对比页
     window.open(`/compare/${orderId}`, '_blank');
-    // 刷新列表 — 从 API 重新加载
-    orders = [...apiOrders];
-    loadFromApi();
+    // 刷新列表
+    orders = [...MOCK_ORDERS];
+    // 需要从 API 刷新，但现在是 mock 模式，后面接真实 API 后调用 loadFromApi()
   })
   .catch(err => {
     btn.disabled = false;
@@ -946,20 +860,28 @@ function lookupAndAddOrder() {
 }
 
 // ════════════════════════════════════════════
-//  Init — event binding only
+//  Init
 // ════════════════════════════════════════════
 function initFilters() {
+  populateSelectWithCount('ownerFilter', MOCK_ORDERS, 'owner', '销售');
+  populateSelectWithCount('butlerFilter', MOCK_ORDERS, 'butler', '管家');
+  populateSelectWithCount('routeFilter', MOCK_ORDERS, 'product_name', '路线');
+  populateSelectWithCount('statusFilter', MOCK_ORDERS, 'order_status');
+  populateSelectWithCount('et818StatusFilter', MOCK_ORDERS, 'et818_status', 'ET818状态');
+
+  // Restore filters from URL
+  restoreFiltersFromUrl();
+
   // Enter key for lookup
   document.getElementById('orderLookupInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') lookupAndAddOrder();
   });
+
+  // Apply restored filters
+  applyFilters();
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  initFilters();
-  await loadFromApi();
-  checkEtSession();
-});
+document.addEventListener('DOMContentLoaded', initFilters);
 
 function populateSelectWithCount(id, data, field, label) {
   const sel = document.getElementById(id);
@@ -1264,17 +1186,16 @@ function applyFilters() {
   const paymentValues = getPaymentFilterValues();
   const et818Filter = document.getElementById('et818StatusFilter').value;
 
-  const source = apiOrders.length ? apiOrders : [];
-  let filtered = source.filter(o => {
+  let filtered = MOCK_ORDERS.filter(o => {
     if (search) {
-      const haystack = [o.order_no, o.customer_name, o.customer_phone, o.route_name || o.product_name, o.channel].join(' ').toLowerCase();
+      const haystack = [o.order_no, o.customer_name, o.customer_phone, o.product_name, o.channel].join(' ').toLowerCase();
       if (!haystack.includes(search)) return false;
     }
     if (dateFrom && o.departure_date < dateFrom) return false;
     if (dateTo && o.departure_date > dateTo) return false;
     if (owner && (o.owner || '') !== owner) return false;
     if (butler && (o.butler || '') !== butler) return false;
-    if (route && (o.route_name || '') !== route) return false;
+    if (route && o.product_name !== route) return false;
     if (status && o.order_status !== status) return false;
     if (paymentValues.length && !paymentValues.includes(o.payment_status)) return false;
     if (et818Filter && (o.et818_status || '') !== et818Filter) return false;
@@ -1298,7 +1219,7 @@ function clearFilters() {
   // Reset multi-select payment
   document.querySelectorAll('#paymentDropdown input[type="checkbox"]').forEach(cb => cb.checked = cb.value === '');
   updatePaymentLabel();
-  orders = [...apiOrders];
+  orders = [...MOCK_ORDERS];
   syncFiltersToUrl();
   render();
 }
@@ -1366,7 +1287,7 @@ let cmOrder = null;
 
 function cmShow(e, orderId) {
   e.preventDefault();
-  cmOrder = apiOrders.find(o => o.id === orderId) || orders.find(o => o.id === orderId);
+  cmOrder = MOCK_ORDERS.find(o => o.id === orderId) || orders.find(o => o.id === orderId);
   const menu = document.getElementById('contextMenu');
   let x = e.clientX, y = e.clientY;
   const mw = 200, mh = menu.scrollHeight || 240;
@@ -1409,83 +1330,17 @@ function cmOpenVbk() {
 function cmOpenEt() {
   if (!cmOrder) return;
   const orderNo = cmOrder.order_no; cmHide();
-  const status = document.getElementById('lookupStatus');
-  status.className = 'lookup-status';
-  status.textContent = `正在打开易途详情 ${orderNo}...`;
   fetch('/api/et818/find-by-order-no', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ order_no: orderNo })
   })
-  .then(r => r.json().then(data => ({ ok: r.ok, data })))
-  .then(({ ok, data }) => {
-    if (ok && data.matches && data.matches.length) {
-      const m = data.matches[0];
-      // 通过 CDP 在易途框架内打开（布局正常）
-      fetch('/api/et818/open-detail', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ reg_id: m.reg_id, biz_mode: m.biz_mode, plan_id: m.plan_id || 0 })
-      })
-      .then(r2 => r2.json())
-      .then(d2 => {
-        if (d2.ok) {
-          status.className = 'lookup-status ok';
-          status.textContent = '✅ 易途详情已在调试 Chrome 中打开';
-          setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 5000);
-        } else {
-          status.className = 'lookup-status err';
-          status.textContent = d2.detail || '打开易途详情失败';
-        }
-      })
-      .catch(() => {
-        status.className = 'lookup-status err';
-        status.textContent = '打开易途详情失败';
-      });
-    } else {
-      status.className = 'lookup-status err';
-      status.textContent = data.detail || '未在易途中找到该订单号';
-      setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 5000);
-    }
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok && data.matches && data.matches.length) {
+      window.open(data.matches[0].detail_url, '_blank');
+    } else { alert('未在 ET818 中找到该订单号'); }
   })
-  .catch(err => {
-    status.className = 'lookup-status err';
-    status.textContent = '查询易途失败: ' + err.message;
-  });
-}
-
-function cmCheckEtStatus() {
-  if (!cmOrder) return;
-  const orderId = cmOrder.id;
-  const orderNo = cmOrder.order_no;
-  cmHide();
-  const status = document.getElementById('lookupStatus');
-  status.className = 'lookup-status';
-  status.textContent = `正在检查易途状态 ${orderNo}...`;
-  fetch(`/api/orders/${orderId}/check-et818-status`, { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        const s = data.et818_status;
-        const found = data.found;
-        status.className = found ? 'lookup-status ok' : 'lookup-status err';
-        status.textContent = found
-          ? `✅ 易途中已找到该订单（${s}）`
-          : `❌ 易途中未找到该订单（${s}）`;
-        // Update local state
-        const o = apiOrders.find(x => x.id === orderId);
-        if (o) o.et818_status = s;
-        orders.filter(x => x.id === orderId).forEach(x => x.et818_status = s);
-        render();
-        setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 5000);
-      } else {
-        status.className = 'lookup-status err';
-        status.textContent = data.detail || '检查失败';
-      }
-    })
-    .catch(err => {
-      status.className = 'lookup-status err';
-      status.textContent = '检查失败: ' + err.message;
-    });
+  .catch(() => alert('查询 ET818 失败'));
 }
 
 function cmRefresh() {
@@ -1507,6 +1362,7 @@ function cmRefresh() {
     if (data.ok) {
       status.className = 'lookup-status ok';
       status.textContent = `订单 ${orderNo} 已刷新`;
+      // TODO: reload from API when real data is connected
       setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 3000);
     } else {
       status.className = 'lookup-status err';
@@ -1517,38 +1373,6 @@ function cmRefresh() {
     status.className = 'lookup-status err';
     status.textContent = '刷新失败: ' + err.message;
   });
-}
-
-function cmDelete() {
-  if (!cmOrder) return;
-  const order = cmOrder;
-  const orderNo = order.order_no;
-  const orderId = order.id;
-  cmHide();
-  if (!confirm(`确定要删除订单 ${orderNo} 吗？\\n\\n客户：${order.customer_name || ''}\\n路线：${order.product_name || ''}\\n\\n删除后不可恢复。`)) return;
-  const status = document.getElementById('lookupStatus');
-  status.className = 'lookup-status';
-  status.textContent = `正在删除订单 ${orderNo}...`;
-  fetch(`/api/orders/${orderId}`, { method: 'DELETE' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        status.className = 'lookup-status ok';
-        status.textContent = `订单 ${orderNo} 已删除`;
-        // Remove from local state and re-render
-        apiOrders = apiOrders.filter(o => o.id !== orderId);
-        orders = orders.filter(o => o.id !== orderId);
-        render();
-        setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 3000);
-      } else {
-        status.className = 'lookup-status err';
-        status.textContent = data.detail || '删除失败';
-      }
-    })
-    .catch(err => {
-      status.className = 'lookup-status err';
-      status.textContent = '删除失败: ' + err.message;
-    });
 }
 
 // Close context menu on outside click or Escape
@@ -1564,53 +1388,20 @@ function refreshAllOrders() {
   const list = orders;
   if (!list.length) { alert('没有可刷新的订单'); return; }
 
-  // First check CDP status
-  const status = document.getElementById('lookupStatus');
-  status.className = 'lookup-status';
-  status.textContent = '检查调试浏览器...';
-
-  fetch('/api/cdp/status')
-    .then(r => r.json())
-    .then(cdp => {
-      if (!cdp.connected) {
-        btn.disabled = false;
-        status.className = 'lookup-status err';
-        status.textContent = '⚠️ 调试 Chrome 未运行，请先启动 chrome-debug.bat（9222 端口不通）';
-        setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 8000);
-        return;
-      }
-      startRefresh(list, btn, status);
-    })
-    .catch(() => {
-      // If CDP check itself fails, still try to refresh
-      startRefresh(list, btn, status);
-    });
-}
-
-function startRefresh(list, btn, status) {
   btn.disabled = true;
   btn.textContent = `🔄 刷新中 0/${list.length}`;
 
   let done = 0, failed = 0;
-  let firstError = '';
+  const status = document.getElementById('lookupStatus');
 
   function next(i) {
     if (i >= list.length) {
       btn.disabled = false;
-      let msg;
-      if (failed === list.length) {
-        msg = firstError
-          ? `全部失败：${firstError}`
-          : `全部失败（${list.length} 单）`;
-      } else if (failed) {
-        msg = `成功 ${done}，失败 ${failed}${firstError ? '：' + firstError : ''}`;
-      } else {
-        msg = `全部刷新完成，共 ${done} 单`;
-      }
+      const msg = failed ? `全部刷新完成，成功 ${done}，失败 ${failed}` : `全部刷新完成，共 ${done} 单`;
       btn.textContent = '🔄 全部刷新';
       status.className = failed ? 'lookup-status err' : 'lookup-status ok';
       status.textContent = msg;
-      setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 8000);
+      setTimeout(() => { status.className = 'lookup-status'; status.textContent = ''; }, 5000);
       return;
     }
     const o = list[i];
@@ -1622,19 +1413,10 @@ function startRefresh(list, btn, status) {
     })
     .then(r => r.json())
     .then(data => {
-      if (data.ok) {
-        done++;
-      } else {
-        failed++;
-        if (!firstError) firstError = (data.detail || '').slice(0, 80);
-      }
+      if (data.ok) done++; else failed++;
       next(i + 1);
     })
-    .catch(err => {
-      failed++;
-      if (!firstError) firstError = err.message.slice(0, 80);
-      next(i + 1);
-    });
+    .catch(() => { failed++; next(i + 1); });
   }
   next(0);
 }
@@ -1665,12 +1447,12 @@ function render() {
     if (!groups[key]) groups[key] = [];
     groups[key].push(o);
   });
-  // Sort keys: dates sort chronologically descending, others alphabetically
+  // Sort keys: dates sort chronologically, others alphabetically
   const isDateField = groupField === 'departure_date' || groupField === 'order_date';
   const sortedKeys = Object.keys(groups).sort((a, b) => {
     if (a === '未设置') return 1;
     if (b === '未设置') return -1;
-    if (isDateField) return b.localeCompare(a); // 倒序：最新在前
+    if (isDateField) return a.localeCompare(b);
     return a.localeCompare(b, 'zh');
   });
 
@@ -1714,7 +1496,7 @@ function render() {
                 <th class="col-butler">管家</th>
                 <th class="col-status">状态</th>
                 <th class="col-amount">金额</th>
-                <th class="col-et818">易途</th>
+                <th class="col-et818">ET818</th>
                 <th class="col-actions">操作</th>
               </tr>
             </thead>
@@ -1763,7 +1545,7 @@ function render() {
                 <th class="col-butler">管家</th>
                 <th class="col-status">状态</th>
                 <th class="col-amount">金额</th>
-                <th class="col-et818">易途</th>
+                <th class="col-et818">ET818</th>
                 <th class="col-actions">操作</th>
               </tr>
             </thead>
@@ -1809,7 +1591,7 @@ function renderRow(o) {
         <div style="color:var(--tm);font-size:11px">${o.order_date || '—'}</div>
       </td>
       <td><a class="pid-link" href="https://vacations.ctrip.com/travel/detail/p${o.product_id}.html" target="_blank" title="打开携程产品页">${o.product_id || '—'}</a></td>
-      <td style="font-size:12px;color:var(--ts);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(o.product_name)}">${esc(o.route_name || o.product_name)}</td>
+      <td style="font-size:12px;color:var(--ts);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(o.product_name)}">${esc(o.product_name)}</td>
       <td><span class="editable-text" onclick="editField(this,${o.id},'owner')">${o.owner ? esc(o.owner) : '<span class="placeholder">—</span>'}</span></td>
       <td><span class="editable-text" onclick="editField(this,${o.id},'butler')">${o.butler ? esc(o.butler) : '<span class="placeholder">—</span>'}</span></td>
       <td>
@@ -1864,10 +1646,7 @@ function updateStats() {
   document.getElementById('statUnpaid').textContent = unpaid;
   document.getElementById('statConfirmed').textContent = confirmed;
   document.getElementById('statPending').textContent = pending;
-  const etDone = orders.filter(o => {
-    const s = o.et818_status || '未处理';
-    return s === '已提交' || s === '已填写';
-  }).length;
+  const etDone = orders.filter(o => o.et818_status === '已提交' || o.et818_status === '已填写').length;
   document.getElementById('statEtDone').textContent = `${etDone}/${total}`;
   document.getElementById('statAmount').textContent = fmtMoney(totalAmount);
 }
@@ -1900,7 +1679,7 @@ function et818BadgeCls(s) {
 }
 
 function renderGroupEtProgress(items) {
-  const done = items.filter(o => (o.et818_status || '未处理') === '已提交' || (o.et818_status || '未处理') === '已填写').length;
+  const done = items.filter(o => o.et818_status === '已提交' || o.et818_status === '已填写').length;
   const total = items.length;
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
   const isDone = done === total && total > 0;
@@ -1974,7 +1753,7 @@ function editField(el, orderId, field) {
   input.value = current;
   input.placeholder = field === 'owner' ? '负责人' : '管家';
   input.addEventListener('blur', () => {
-    const order = apiOrders.find(o => o.id === orderId);
+    const order = MOCK_ORDERS.find(o => o.id === orderId);
     if (order) order[field] = input.value.trim();
     const val = input.value.trim();
     el.innerHTML = val ? esc(val) : '<span class="placeholder">—</span>';

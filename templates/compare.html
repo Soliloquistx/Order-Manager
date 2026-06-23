@@ -3,135 +3,144 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>双栏对比 — 订单</title>
+  <title>对比 — 订单详情</title>
   <link rel="stylesheet" href="/static/styles.css" />
   <style>
-    /* 对比页专用 */
-    .compare-page { max-width: 1600px; margin: 0 auto; padding: 16px; }
-    .compare-header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 16px; border-bottom: 1px solid var(--line);
-      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-    }
-    .compare-header h1 { font-size: 18px; font-weight: 800; margin: 0; }
-    .compare-header .order-meta { color: var(--muted); font-size: 13px; }
-    .compare-header .actions { display: flex; gap: 8px; align-items: center; }
+    .compare-page { max-width: 1100px; margin: 0 auto; padding: 16px; }
 
-    .jump-buttons { display: flex; gap: 8px; }
-    .jump-buttons .jb {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 14px; border-radius: var(--r-lg);
-      font-size: 13px; font-weight: 600; text-decoration: none;
-      cursor: pointer; border: 1px solid var(--line);
+    /* Header */
+    .compare-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 16px 20px; border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--s);
+      margin-bottom: 16px;
+    }
+    .compare-header .hdr-left h1 { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+    .compare-header .hdr-left .meta { color: var(--tm); font-size: 13px; }
+    .compare-header .hdr-right { display: flex; gap: 8px; align-items: center; }
+
+    .jb {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 14px; border-radius: var(--r-lg);
+      font-size: 13px; font-weight: 600; border: 1px solid;
+      text-decoration: none; cursor: pointer;
       transition: all 120ms ease;
     }
-    .jump-buttons .jb-vbk {
-      background: #eef2ff; color: #4338ca; border-color: #c7d2fe;
-    }
-    .jump-buttons .jb-vbk:hover { background: #4338ca; color: #fff; border-color: #4338ca; }
-    .jump-buttons .jb-et {
-      background: #f0fdf4; color: #166534; border-color: #bbf7d0;
-    }
-    .jump-buttons .jb-et:hover { background: #166534; color: #fff; border-color: #166534; }
-    body.dark .jump-buttons .jb-vbk { background: rgba(67,56,202,0.15); color: #a5b4fc; border-color: rgba(67,56,202,0.3); }
-    body.dark .jump-buttons .jb-vbk:hover { background: #4338ca; color: #fff; border-color: #4338ca; }
-    body.dark .jump-buttons .jb-et { background: rgba(22,101,52,0.15); color: #86efac; border-color: rgba(22,101,52,0.3); }
-    body.dark .jump-buttons .jb-et:hover { background: #166534; color: #fff; border-color: #166534; }
+    .jb-vbk { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+    .jb-vbk:hover { background: #4338ca; color: #fff; }
+    .jb-et  { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+    .jb-et:hover  { background: #166534; color: #fff; }
+    body.dark .jb-vbk { background: rgba(67,56,202,0.15); color: #a5b4fc; border-color: rgba(67,56,202,0.3); }
+    body.dark .jb-vbk:hover { background: #4338ca; color: #fff; }
+    body.dark .jb-et  { background: rgba(22,101,52,0.15); color: #86efac; border-color: rgba(22,101,52,0.3); }
+    body.dark .jb-et:hover  { background: #166534; color: #fff; }
 
-    .dual-col {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-      margin-top: 16px;
+    /* Comparison table */
+    .cmp-card {
+      border: 1px solid var(--border); border-radius: 14px;
+      overflow: hidden; background: var(--bg);
+      margin-bottom: 16px;
     }
-    .col {
-      border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
-      background: #fff;
+    .cmp-card-header {
+      padding: 11px 16px; font-size: 14px; font-weight: 700;
+      border-bottom: 1px solid var(--border-light);
+      background: var(--s);
+      display: flex; align-items: center; gap: 6px;
     }
-    .col-header {
-      padding: 10px 14px;
-      font-size: 14px; font-weight: 700;
-      border-bottom: 1px solid var(--line);
-      display: flex; align-items: center; gap: 8px;
+    .cmp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .cmp-table th {
+      padding: 9px 12px; border-bottom: 2px solid var(--border);
+      font-weight: 700; font-size: 12px; text-align: left;
+      background: #f8fafc;
     }
-    .col-header .badge-tag {
-      display: inline-block; padding: 2px 8px; border-radius: 999px;
-      font-size: 11px; font-weight: 600;
-    }
-    .col-header .badge-vbk { background: #dbeafe; color: #1d4ed8; }
-    .col-header .badge-et  { background: #dcfce7; color: #15803d; }
-
-    .col-body { padding: 12px 14px; overflow-x: auto; }
-
-    .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .compare-table td {
-      padding: 6px 8px; border-bottom: 1px solid #f1f5f9;
+    body.dark .cmp-table th { background: #16171d; }
+    .cmp-table th.col-label { width: 120px; color: var(--tm); }
+    .cmp-table th.col-vbk { width: 45%; color: #1d4ed8; }
+    .cmp-table th.col-et  { color: #15803d; }
+    .cmp-table td {
+      padding: 9px 12px; border-bottom: 1px solid var(--border-light);
       vertical-align: top;
     }
-    .compare-table .label {
-      color: var(--muted); font-weight: 600; white-space: nowrap;
-      width: 100px; padding-right: 12px;
-    }
-    .compare-table .value { color: var(--text); word-break: break-word; }
+    .cmp-table tr:last-child td { border-bottom: none; }
+    .cmp-table .label { color: var(--tm); font-weight: 600; white-space: nowrap; }
+    .cmp-table .val { word-break: break-word; line-height: 1.5; }
+    .cmp-table .missing { color: #94a3b8; }
 
-    .section-title {
-      font-size: 12px; font-weight: 700; color: var(--muted);
-      margin: 14px 0 8px; padding: 4px 0; border-bottom: 1px dashed var(--line);
-    }
-    .section-title:first-of-type { margin-top: 0; }
+    /* Diff highlight */
+    .cmp-table tr.diff td.val-vbk,
+    .cmp-table tr.diff td.val-et { background: #fef3c7; }
+    body.dark .cmp-table tr.diff td.val-vbk,
+    body.dark .cmp-table tr.diff td.val-et { background: rgba(251,191,36,0.1); }
 
-    .sub-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+    /* Section divider */
+    .cmp-divider td {
+      padding: 4px 12px; border-bottom: none;
+      font-size: 11px; font-weight: 700; color: var(--tm);
+      letter-spacing: 0.5px;
+    }
+
+    /* Collapsible sub-sections */
+    .sub-section { margin-bottom: 16px; }
+    .sub-section summary {
+      cursor: pointer; padding: 11px 16px;
+      font-size: 13px; font-weight: 700;
+      border: 1px solid var(--border); border-radius: 10px;
+      background: var(--s);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sub-section summary:hover { background: var(--h); }
+    .sub-section .sub-body {
+      margin-top: 8px; border: 1px solid var(--border-light);
+      border-radius: 10px; overflow: hidden;
+    }
+    .sub-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .sub-table th {
-      padding: 4px 6px; border: 1px solid #e5e7eb;
-      background: #f9fafb; font-weight: 600; color: #666;
+      padding: 6px 8px; border-bottom: 1px solid var(--border);
+      background: #f8fafc; font-weight: 600; color: var(--tm);
       text-align: left; white-space: nowrap;
     }
-    .sub-table td {
-      padding: 4px 6px; border: 1px solid #e5e7eb;
-      color: #333; white-space: nowrap;
+    body.dark .sub-table th { background: #16171d; }
+    .sub-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); color: var(--t); }
+    .sub-table tr:last-child td { border-bottom: none; }
+
+    .empty-inline { text-align: center; padding: 20px; color: var(--tm); font-size: 13px; }
+
+    /* Warnings */
+    .warn-box {
+      margin-top: 8px; padding: 10px 14px; border-radius: 10px;
+      background: #fef3c7; font-size: 12px; line-height: 1.6;
     }
+    body.dark .warn-box { background: rgba(251,191,36,0.1); }
+    .warn-box .warn-title { font-weight: 700; margin-bottom: 4px; }
+    .warn-box .warn-item { color: #b45309; }
+    body.dark .warn-box .warn-item { color: #fbbf24; }
 
-    .diff-value { background: #fef3c7; padding: 0 2px; border-radius: 3px; }
-    .missing { color: #94a3b8; font-style: italic; }
-    .empty-inline { color: #94a3b8; font-size: 12px; padding: 8px; }
-
-    .json-collapse { margin-top: 12px; }
-    .json-collapse summary { cursor: pointer; color: var(--primary); font-size: 12px; font-weight: 600; }
-    .json-viewer {
-      margin-top: 6px; max-height: 300px; overflow: auto;
-      background: #0f172a; color: #e2e8f0; border-radius: 10px;
-      padding: 10px; font-size: 11px; line-height: 1.5;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      white-space: pre-wrap; word-break: break-word;
-    }
-
-    .col-order-info {
-      display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 16px;
-      padding: 12px 14px;
-    }
-    .col-order-info .item { display: flex; gap: 6px; font-size: 13px; }
-    .col-order-info .item .key { color: var(--muted); font-weight: 600; white-space: nowrap; }
-
-    .loading { text-align: center; padding: 40px; color: var(--muted); }
+    .loading { text-align: center; padding: 60px; color: var(--tm); }
     .error { text-align: center; padding: 40px; color: #b91c1c; }
 
-    @media (max-width: 1100px) {
-      .dual-col { grid-template-columns: 1fr; }
+    .badge-count {
+      display: inline-block; font-size: 11px; padding: 1px 7px;
+      border-radius: 999px; background: var(--h); color: var(--tm);
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      .cmp-table th.col-label { width: 80px; }
+      .compare-header { flex-direction: column; gap: 12px; }
     }
   </style>
 </head>
 <body>
-  <div class="compare-page">
-    <div class="compare-header card" id="compareHeader">
-      <div>
-        <h1>双栏对比</h1>
-        <div class="order-meta" id="orderMeta">加载中...</div>
+  <div class="compare-page" id="app">
+    <div class="compare-header" id="compareHeader">
+      <div class="hdr-left">
+        <h1>📋 双栏对比</h1>
+        <div class="meta" id="orderMeta">加载中...</div>
       </div>
-      <div class="actions">
-        <div class="jump-buttons" id="jumpButtons">
-          <a class="jb jb-vbk" id="vbkJumpBtn" href="#" target="_blank" title="打开 VBK 订单页面">📋 VBK 订单页</a>
-          <a class="jb jb-et" id="etJumpBtn" href="#" onclick="event.preventDefault();openEtOrderFromBtn()" title="打开 ET818 详情页面">📊 ET 详情页</a>
-        </div>
-        <button class="btn" onclick="window.close()">关闭</button>
-        <button class="btn primary" onclick="window.history.back()">返回</button>
+      <div class="hdr-right">
+        <a class="jb jb-vbk" id="vbkJumpBtn" href="#" target="_blank">🌐 VBK 订单页</a>
+        <a class="jb jb-et" id="etJumpBtn" href="#" onclick="event.preventDefault();openEtOrder()">📊 易途 详情页</a>
       </div>
     </div>
     <div id="compareContent" class="loading">正在加载对比数据...</div>
@@ -169,23 +178,16 @@
       const vbkTravellers = vbk.travellers || [];
       const vbkPickup = vbk.pickup_dropoff || [];
 
-      // 订单基本信息
+      // Header
       const orderNo = order.order_no || '';
       document.getElementById('orderMeta').innerHTML =
-        `订单 #${esc(order.id || '')} · 订单号 <strong>${esc(orderNo)}</strong>` +
-        ` · ${esc(order.product_name || '')} · 总计 ${order.total_amount != null ? esc('' + order.total_amount) + ' CNY' : '暂无'}`;
-      // 设置跳转按钮
+        `订单号 <strong>${esc(orderNo)}</strong> · ${esc(order.product_name || '')} · 总计 ${order.total_amount != null ? esc('' + order.total_amount) + ' CNY' : '暂无'}`;
       document.getElementById('vbkJumpBtn').href = `https://vbooking.ctrip.com/order/orderDetail?orderId=${orderNo}`;
       window._compareOrderNo = orderNo;
 
-      // 原始 JSON（如果有）
-      const rawJson = vbkKey._raw_json_parsed || null;
-
-      let vbkOrd = vbkKey;
-      let etOrd = {
+      // ET side data
+      const etOrd = {
         order_no: et.order_no || '',
-        total_amount_vbk: et.total_amount_vbk || '',
-        // order_info fields
         departure_date: orderInfo.departure_date ? (orderInfo.departure_date.raw || '') : '',
         return_date: orderInfo.return_date ? (orderInfo.return_date.raw || '') : '',
         contact_name: orderInfo.contact_name || '',
@@ -206,207 +208,178 @@
         meta: etPayload.meta || {},
       };
 
-      // 对比字段列表
-      const fields = [
-        { label: '订单号',         vbk: order.order_no,            et: etOrd.order_no },
-        { label: '产品名',         vbk: order.product_name,        et: etOrd.template_name || etOrd.template_keyword },
-        { label: '出发日期',       vbk: vbkOrd.departure_date,     et: etOrd.departure_date },
-        { label: '返程日期',       vbk: vbkOrd.return_date,        et: etOrd.return_date },
-        { label: '出发城市',       vbk: vbkOrd.departure_city,     et: '' },
-        { label: '联系人',         vbk: vbkOrd.customer_name,      et: etOrd.contact_name },
-        { label: '联系电话',       vbk: vbkOrd.customer_phone,     et: etOrd.contact_phone },
-        { label: '成人数',         vbk: order.adult_count,          et: etOrd.adult_count },
-        { label: '儿童数',         vbk: order.child_count,          et: etOrd.child_count },
-        { label: '大交通',         vbk: '',                         et: etOrd.transport_name },
-        { label: '团队类别',       vbk: '',                         et: etOrd.team_category },
-        { label: '渠道',           vbk: vbkOrd.distribution_channel, et: etOrd.channel_name },
-        { label: '订单类型',       vbk: vbkOrd.order_type_text,    et: '' },
-        { label: '确认状态',       vbk: vbkOrd.confirm_status_text, et: '' },
-        { label: '支付状态',       vbk: vbkOrd.payment_status_text, et: '' },
-        { label: '销售',           vbk: '',                         et: etOrd.sales_name },
-        { label: '景区订单号',     vbk: vbkOrd.scenic_booking_no,  et: etOrd.scenic_booking_no },
-        { label: '预约景区',       vbk: vbkOrd.reservation_scenic_name, et: etOrd.reservation_scenic_name },
-        { label: '参观日期',       vbk: '',                         et: etOrd.visit_date },
-        { label: '商家备注',       vbk: vbkOrd.merchant_note,      et: (etOrd.notes_block.merchant_note || '') },
+      // Build comparison rows
+      // Section: 订单信息
+      const groups = [
+        { label: '订单信息' },
+        { label: '订单号',        vbk: order.order_no,                 et: etOrd.order_no },
+        { label: '产品名/线路',   vbk: order.product_name,             et: etOrd.template_name || etOrd.template_keyword },
+        { label: '订单类型',      vbk: vbkKey.order_type_text,         et: '' },
+        { label: '确认状态',      vbk: vbkKey.confirm_status_text,     et: '' },
+        { label: '支付状态',      vbk: vbkKey.payment_status_text,     et: '' },
+
+        { label: '日期与行程' },
+        { label: '出发日期',      vbk: vbkKey.departure_date,           et: etOrd.departure_date },
+        { label: '返程日期',      vbk: vbkKey.return_date,              et: etOrd.return_date },
+        { label: '出发城市',      vbk: vbkKey.departure_city,           et: '' },
+
+        { label: '联系人与人数' },
+        { label: '联系人',        vbk: vbkKey.customer_name,            et: etOrd.contact_name },
+        { label: '联系电话',      vbk: vbkKey.customer_phone,           et: etOrd.contact_phone },
+        { label: '成人数',        vbk: order.adult_count,               et: etOrd.adult_count },
+        { label: '儿童数',        vbk: order.child_count,               et: etOrd.child_count },
+
+        { label: '服务配置' },
+        { label: '大交通',        vbk: '',                               et: etOrd.transport_name },
+        { label: '团队类别',      vbk: '',                               et: etOrd.team_category },
+        { label: '渠道',          vbk: vbkKey.distribution_channel,     et: etOrd.channel_name },
+        { label: '销售',          vbk: '',                               et: etOrd.sales_name },
       ];
 
-      // 用房
+      // 用房 — special row
       const vbkSharing = vbkKey.room_sharing || '';
       const rm = etOrd.room_need || {};
-      const roomStr = `标间${rm.standard||0} / 大床${rm.big_bed||0} / 三人间${rm.triple||0} / 单女${rm.single_female||0} / 单男${rm.single_male||0}`;
+      const roomVbk = vbkSharing ? '拼房:' + vbkSharing : '';
+      const roomEt = `标间${rm.standard||0} / 大床${rm.big_bed||0} / 三人间${rm.triple||0}`;
 
-      // 渲染
-      const content = document.getElementById('compareContent');
+      // 景区
+      const scenicGroup = [
+        { label: '景区' },
+        { label: '景区订单号',    vbk: vbkKey.scenic_booking_no,        et: etOrd.scenic_booking_no },
+        { label: '预约景区',      vbk: vbkKey.reservation_scenic_name,  et: etOrd.reservation_scenic_name },
+        { label: '参观日期',      vbk: '',                               et: etOrd.visit_date },
+      ];
 
-      let fieldsHtml = fields.map(f => {
-        const vv = fmt(f.vbk);
-        const ev = fmt(f.et);
-        const isDiff = vv && ev && vv !== ev && !f.label.startsWith('备注');
-        return `<tr>
-          <td class="label">${esc(f.label)}</td>
-          <td class="value">${vv ? esc(vv) : '<span class="missing">—</span>'}</td>
-          <td class="value">${ev ? esc(ev) : '<span class="missing">—</span>'}</td>
+      // 备注
+      const notesBlock = etOrd.notes_block || {};
+      const etNotes = [
+        notesBlock.merchant_note,
+        notesBlock.order_note,
+        notesBlock.internal_note,
+        notesBlock.merged_note,
+      ].filter(Boolean).join(' | ') || '';
+
+      const noteGroup = [
+        { label: '备注' },
+        { label: '商家备注',      vbk: vbkKey.merchant_note,            et: notesBlock.merchant_note || '' },
+      ];
+
+      function buildRow(row) {
+        if (row.label && !('vbk' in row)) {
+          // Section divider
+          return `<tr class="cmp-divider"><td colspan="3">${esc(row.label)}</td></tr>`;
+        }
+        const vv = fmt(row.vbk);
+        const ev = fmt(row.et);
+        const isDiff = vv && ev && vv !== ev;
+        return `<tr${isDiff ? ' class="diff"' : ''}>
+          <td class="label">${esc(row.label)}</td>
+          <td class="val val-vbk">${vv ? esc(vv) : '<span class="missing">—</span>'}</td>
+          <td class="val val-et">${ev ? esc(ev) : '<span class="missing">—</span>'}</td>
         </tr>`;
-      }).join('');
+      }
 
-      // 用房特殊行
-      fieldsHtml += `<tr>
-        <td class="label">用房</td>
-        <td class="value">${vbkSharing ? esc('拼房:' + vbkSharing) : '<span class="missing">—</span>'}</td>
-        <td class="value">${esc(roomStr)}</td>
-      </tr>`;
+      // 用房行
+      function buildRoomRow() {
+        const rv = roomVbk;
+        const re = roomEt;
+        const isDiff = rv && re && rv !== re;
+        return `<tr${isDiff ? ' class="diff"' : ''}>
+          <td class="label">用房</td>
+          <td class="val val-vbk">${rv ? esc(rv) : '<span class="missing">—</span>'}</td>
+          <td class="val val-et">${re ? esc(re) : '<span class="missing">—</span>'}</td>
+        </tr>`;
+      }
 
-      // 客人对比表
-      function travellerRow(t, i, source) {
-        if (source === 'vbk') {
+      const mainRows = [...groups, ...scenicGroup, ...noteGroup].map(buildRow).join('');
+      const roomRow = buildRoomRow();
+
+      // 对比表
+      const cmpTableHtml = `<table class="cmp-table">
+        <thead><tr>
+          <th class="col-label">字段</th>
+          <th class="col-vbk">VBK 原始</th>
+          <th class="col-et">易途 填表</th>
+        </tr></thead>
+        <tbody>${mainRows}${roomRow}</tbody>
+      </table>`;
+
+      // 客人子表
+      function travRow(t, i, src) {
+        if (src === 'vbk') {
           return `<tr><td>${i+1}</td><td>${esc(t.name||'')}</td><td>${esc(t.phone||'')}</td><td>${esc(t.id_type||'')}</td><td>${esc(t.id_no||'')}</td><td>${esc(t.gender||'')}</td><td>${esc(t.birth_date||'')}</td></tr>`;
         }
-        // ET 版
         const bt = t.birth_date || {};
         const bd = typeof bt === 'object' ? (bt.raw || '') : bt;
         return `<tr><td>${i+1}</td><td>${esc(t.name||'')}</td><td>${esc(t.phone||'')}</td><td>${esc(t.id_type||'')}</td><td>${esc(t.id_no||'')}</td><td>${esc(t.gender||'')}</td><td>${esc(bd)}</td></tr>`;
       }
 
       const vbkTravHtml = vbkTravellers.length
-        ? `<table class="sub-table"><thead><tr><th>#</th><th>姓名</th><th>电话</th><th>证件类型</th><th>证件号</th><th>性别</th><th>出生日期</th></tr></thead><tbody>${vbkTravellers.map((t,i) => travellerRow(t,i,'vbk')).join('')}</tbody></table>`
-        : '<div class="empty-inline">暂无客人数据</div>';
-
+        ? vbkTravellers.map((t,i) => travRow(t,i,'vbk')).join('')
+        : '';
       const etTravHtml = travellers.length
-        ? `<table class="sub-table"><thead><tr><th>#</th><th>姓名</th><th>电话</th><th>证件类型</th><th>证件号</th><th>性别</th><th>出生日期</th></tr></thead><tbody>${travellers.map((t,i) => travellerRow(t,i,'et')).join('')}</tbody></table>`
-        : '<div class="empty-inline">暂无客人数据</div>';
+        ? travellers.map((t,i) => travRow(t,i,'et')).join('')
+        : '';
 
-      // 接送对比
-      function pickupRow(p, i) {
+      const travSection = (vbkTravellers.length || travellers.length) ? `
+        <details class="sub-section" open>
+          <summary>👥 客人 <span class="badge-count">VBK ${vbkTravellers.length}人</span> <span class="badge-count">ET ${travellers.length}人</span></summary>
+          <div class="sub-body">
+            <table class="sub-table">
+              <thead><tr><th>#</th><th>姓名</th><th>电话</th><th>证件类型</th><th>证件号</th><th>性别</th><th>出生日期</th></tr></thead>
+              <tbody>${vbkTravHtml}${etTravHtml}</tbody>
+            </table>
+          </div>
+        </details>
+      ` : '';
+
+      // 接送子表
+      function pkRow(p, i) {
         const d = p.date || {};
         const date = typeof d === 'object' ? (d.raw || '') : d;
         return `<tr><td>${i+1}</td><td>${esc(date)}</td><td>${esc(p.flight_no || p.flight || '')}</td><td>${esc(p.time||p.time_text||'')}</td><td>${esc(p.location||p.route||'')}</td><td>${esc(p.description||'')}</td></tr>`;
       }
+      function etPkRow(p) {
+        const d = p.date || {};
+        const date = typeof d === 'object' ? (d.raw || '') : d;
+        const idx = p.sort_index != null ? p.sort_index + 1 : pickup.indexOf(p) + 1;
+        return `<tr><td>${idx}</td><td>${esc(date)}</td><td>${esc(p.flight_no||'')}</td><td>${esc(p.time||'')}</td><td>${esc(p.location||'')}</td><td>${esc(p.count||p.description||'')}</td></tr>`;
+      }
 
-      const vbkPkHtml = vbkPickup.length
-        ? `<table class="sub-table"><thead><tr><th>#</th><th>日期</th><th>航班</th><th>时间</th><th>地点</th><th>描述</th></tr></thead><tbody>${vbkPickup.map(pickupRow).join('')}</tbody></table>`
-        : '<div class="empty-inline">暂无接送数据</div>';
+      const vbkPkHtml = vbkPickup.length ? vbkPickup.map(pkRow).join('') : '';
+      const etPkHtml = pickup.length ? pickup.map(etPkRow).join('') : '';
 
-      const etPkHtml = pickup.length
-        ? `<table class="sub-table"><thead><tr><th>#</th><th>日期</th><th>航班</th><th>时间</th><th>地点</th><th>人数</th></tr></thead><tbody>${pickup.map(p => {
-            const d = p.date || {};
-            const date = typeof d === 'object' ? (d.raw || '') : d;
-            return `<tr><td>${p.sort_index != null ? p.sort_index+1 : pickup.indexOf(p)+1}</td><td>${esc(date)}</td><td>${esc(p.flight_no||'')}</td><td>${esc(p.time||'')}</td><td>${esc(p.location||'')}</td><td>${esc(p.count||p.description||'')}</td></tr>`;
-          }).join('')}</tbody></table>`
-        : '<div class="empty-inline">暂无接送数据</div>';
+      const pkSection = (vbkPickup.length || pickup.length) ? `
+        <details class="sub-section" open>
+          <summary>🚗 接送/航班 <span class="badge-count">VBK ${vbkPickup.length}条</span> <span class="badge-count">ET ${pickup.length}条</span></summary>
+          <div class="sub-body">
+            <table class="sub-table">
+              <thead><tr><th>#</th><th>日期</th><th>航班</th><th>时间</th><th>地点</th><th>描述</th></tr></thead>
+              <tbody>${vbkPkHtml}${etPkHtml}</tbody>
+            </table>
+          </div>
+        </details>
+      ` : '';
 
-      // 备注对比
-      const notesBlock = etOrd.notes_block || {};
-      const etNotes = [
-        notesBlock.merchant_note || '',
-        notesBlock.order_note || '',
-        notesBlock.internal_note || '',
-        notesBlock.merged_note || '',
-      ].filter(Boolean).join(' | ') || '—';
-
-      // 缺失字段警告
+      // Warnings / missing fields
       const missingFields = (etPayload.meta || {}).missing_fields || [];
       const warnings = (etPayload.meta || {}).warnings || [];
-
-      content.innerHTML = `
-        <div class="dual-col">
-          <div class="col">
-            <div class="col-header"><span class="badge-tag badge-vbk">VBK</span> 原始数据</div>
-            <div class="col-body">
-              <div class="section-title">📋 关键字段</div>
-              <table class="compare-table">
-                <tr><td class="label">订单类型</td><td class="value">${esc(vbkKey.order_type_text || '—')}</td></tr>
-                <tr><td class="label">确认状态</td><td class="value">${esc(vbkKey.confirm_status_text || '—')}</td></tr>
-                <tr><td class="label">支付状态</td><td class="value">${esc(vbkKey.payment_status_text || '—')}</td></tr>
-                <tr><td class="label">出发日期</td><td class="value">${esc(vbkKey.departure_date || '—')}</td></tr>
-                <tr><td class="label">返程日期</td><td class="value">${esc(vbkKey.return_date || '—')}</td></tr>
-                <tr><td class="label">出发城市</td><td class="value">${esc(vbkKey.departure_city || '—')}</td></tr>
-                <tr><td class="label">联系人</td><td class="value">${esc(vbkKey.customer_name || '—')} / ${esc(vbkKey.customer_phone || '—')}</td></tr>
-                <tr><td class="label">渠道</td><td class="value">${esc(vbkKey.distribution_channel || '—')}</td></tr>
-                <tr><td class="label">景区订单号</td><td class="value">${esc(vbkKey.scenic_booking_no || '—')}</td></tr>
-                <tr><td class="label">预约景区</td><td class="value">${esc(vbkKey.reservation_scenic_name || '—')}</td></tr>
-              </table>
-
-              <div class="section-title">📋 商家备注</div>
-              <div style="font-size:13px;color:#334155;white-space:pre-wrap;line-height:1.5">${esc(vbkKey.merchant_note || '无')}</div>
-
-              <div class="section-title">👥 客人</div>
-              ${vbkTravHtml}
-
-              <div class="section-title">🚗 接送/航班</div>
-              ${vbkPkHtml}
-
-              ${rawJson ? `
-                <div class="json-collapse">
-                  <details>
-                    <summary>📄 查看原始 JSON（${Object.keys(rawJson).length} 个字段）</summary>
-                    <div class="json-viewer">${esc(JSON.stringify(rawJson, null, 2))}</div>
-                  </details>
-                </div>
-              ` : ''}
-            </div>
-          </div>
-
-          <div class="col">
-            <div class="col-header"><span class="badge-tag badge-et">ET818</span> 填表数据</div>
-            <div class="col-body">
-              <div class="section-title">📋 关键字段</div>
-              <table class="compare-table">
-                <tr><td class="label">线路模板</td><td class="value">${esc(etOrd.template_keyword || '—')}${etOrd.template_name ? ' → ' + esc(etOrd.template_name) : ''}</td></tr>
-                <tr><td class="label">订单号</td><td class="value">${esc(etOrd.order_no || '—')}</td></tr>
-                <tr><td class="label">出行日期</td><td class="value">${esc(etOrd.departure_date || '—')}</td></tr>
-                <tr><td class="label">返程日期</td><td class="value">${esc(etOrd.return_date || '—')}</td></tr>
-                <tr><td class="label">人数</td><td class="value">成人 ${esc(etOrd.adult_count)} / 儿童 ${esc(etOrd.child_count)}</td></tr>
-                <tr><td class="label">联系人</td><td class="value">${esc(etOrd.contact_name || '—')} / ${esc(etOrd.contact_phone || '—')}</td></tr>
-                <tr><td class="label">大交通</td><td class="value">${esc(etOrd.transport_name || '—')}</td></tr>
-                <tr><td class="label">团队类别</td><td class="value">${esc(etOrd.team_category || '—')}</td></tr>
-                <tr><td class="label">渠道</td><td class="value">${esc(etOrd.channel_name || '—')}</td></tr>
-                <tr><td class="label">销售</td><td class="value">${esc(etOrd.sales_name || '—')}</td></tr>
-                <tr><td class="label">用房</td><td class="value">${esc(roomStr)}</td></tr>
-                <tr><td class="label">景区订单号</td><td class="value">${esc(etOrd.scenic_booking_no || '—')}</td></tr>
-                <tr><td class="label">预约景区</td><td class="value">${esc(etOrd.reservation_scenic_name || '—')}</td></tr>
-                <tr><td class="label">参观日期</td><td class="value">${esc(etOrd.visit_date || '—')}</td></tr>
-              </table>
-
-              <div class="section-title">📋 备注</div>
-              <div style="font-size:13px;color:#334155;white-space:pre-wrap;line-height:1.5">${esc(etNotes)}</div>
-
-              <div class="section-title">👥 客人（${travellers.length}人）</div>
-              ${etTravHtml}
-
-              <div class="section-title">🚗 接送（${pickup.length}条）</div>
-              ${etPkHtml}
-
-              ${missingFields.length || warnings.length ? `
-                <div class="section-title">⚠️ 注意事项</div>
-                ${warnings.length ? `<div style="font-size:12px;color:#b45309;margin-bottom:6px">⚠ ${esc(warnings.join('；'))}</div>` : ''}
-                ${missingFields.length ? `<div style="font-size:12px;color:#b91c1c">缺失字段：${esc(missingFields.join('、'))}</div>` : ''}
-              ` : ''}
-
-              <div class="json-collapse" style="margin-top:14px">
-                <details>
-                  <summary>📄 查看完整 Payload</summary>
-                  <div class="json-viewer">${esc(JSON.stringify(etPayload, null, 2))}</div>
-                </details>
-              </div>
-            </div>
-          </div>
+      const warnBox = (missingFields.length || warnings.length) ? `
+        <div class="warn-box">
+          <div class="warn-title">⚠️ 注意事项</div>
+          ${warnings.length ? `<div class="warn-item">${esc(warnings.join('；'))}</div>` : ''}
+          ${missingFields.length ? `<div class="warn-item" style="color:#b91c1c">缺失字段：${esc(missingFields.join('、'))}</div>` : ''}
         </div>
+      ` : '';
 
-        <div class="dual-col" style="margin-top:0">
-          <div class="col">
-            <div class="col-header">🔄 逐字段对比</div>
-            <div class="col-body">
-              <table class="compare-table">
-                <tr style="background:#f8fafc;font-weight:600">
-                  <td class="label" style="width:100px">字段</td>
-                  <td style="color:#1d4ed8;width:40%">VBK</td>
-                  <td style="color:#15803d">ET818</td>
-                </tr>
-                ${fieldsHtml}
-              </table>
-            </div>
-          </div>
+      document.getElementById('compareContent').innerHTML = `
+        <div class="cmp-card">
+          <div class="cmp-card-header">🔍 逐字段对比</div>
+          ${cmpTableHtml}
         </div>
+        ${travSection}
+        ${pkSection}
+        ${warnBox}
       `;
     }
 
@@ -416,10 +389,10 @@
       return String(v).trim();
     }
     function esc(text) {
-      return String(text ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+      return String(text ?? '').replace(/[&<>\"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[s]));
     }
 
-    async function openEtOrderFromBtn() {
+    async function openEtOrder() {
       const orderNo = window._compareOrderNo;
       if (!orderNo) return;
       try {
@@ -429,16 +402,25 @@
           body: JSON.stringify({ order_no: orderNo })
         });
         const data = await resp.json();
-        if (data.ok && data.matches && data.matches.length) {
+        if (resp.ok && data.matches && data.matches.length) {
           const m = data.matches[0];
-          if (m.detail_url) {
-            window.open(m.detail_url, '_blank');
-            return;
+          // 通过 CDP 在易途框架内打开
+          const r2 = await fetch('/api/et818/open-detail', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ reg_id: m.reg_id, biz_mode: m.biz_mode, plan_id: m.plan_id || 0 })
+          });
+          const d2 = await r2.json();
+          if (d2.ok) {
+            alert('✅ 易途详情已在调试 Chrome 中打开');
+          } else {
+            alert('打开易途详情失败: ' + (d2.detail || ''));
           }
+          return;
         }
-        alert('未在 ET818 中找到该订单号');
+        alert(data.detail || '未在易途中找到该订单号');
       } catch (e) {
-        alert('查询 ET818 失败: ' + e.message);
+        alert('查询易途失败: ' + e.message);
       }
     }
 

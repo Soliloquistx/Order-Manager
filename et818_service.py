@@ -77,6 +77,49 @@ def find_et818_order_by_order_no(order_no: str) -> list[dict]:
     ]
 
 
+def check_and_update_et818_status(order_id: int) -> dict[str, Any]:
+    """Check a single order's 易途 status and update DB."""
+    order = get_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    order_no = (order.get("order_no") or "").strip()
+    if not order_no:
+        raise HTTPException(status_code=400, detail="订单缺少订单号")
+
+    found = False
+    reg_id = None
+    try:
+        matches = bridge.find_by_order_no(order_no)
+        found = len(matches) > 0
+        if found:
+            reg_id = matches[0].reg_id
+    except Et818BridgeError:
+        # Bridge error (未登录/未打开等) → 透传出去，不让前端吞掉
+        raise
+    except Exception:
+        # 搜索请求本身异常（网络等）
+        raise HTTPException(status_code=500, detail="易途搜索请求异常")
+
+    new_status = "已提交" if found else "未处理"
+
+    # Update the DB
+    from database import db_cursor, utc_now_str
+    with db_cursor() as conn:
+        conn.execute(
+            "UPDATE orders SET et818_status = ?, updated_at = ? WHERE id = ?",
+            (new_status, utc_now_str(), order_id),
+        )
+
+    return {
+        "ok": True,
+        "order_id": order_id,
+        "order_no": order_no,
+        "found": found,
+        "et818_status": new_status,
+        "reg_id": reg_id,
+    }
+
+
 def open_et818_detail_by_reg_id(reg_id: int, biz_mode: int | None = None, plan_id: int | None = 0) -> dict:
     detail_url = bridge.open_detail(reg_id=reg_id, biz_mode=biz_mode, plan_id=plan_id)
     return {"ok": True, "detail_url": detail_url}
@@ -938,6 +981,39 @@ def sync_vbk_detail_to_local(order_id: int, detail_data: dict[str, Any]) -> dict
     pickup_dropoff = normalize_pickup_dropoff_for_storage(detail_data.get("pickup_dropoff", []) or [])
     replace_order_pickup_dropoff(order_id, pickup_dropoff)
 
+    # ── 回写 orders 表 ──
+    order_fields = {}
+    supplier_name = detail_data.get("supplier_product_name") or ""
+    if supplier_name:
+        order_fields["route_name"] = supplier_name
+    prod_id = detail_data.get("product_id") or ""
+    if prod_id:
+        order_fields["product_id"] = prod_id
+    total_amt = detail_data.get("total_amount")
+    if total_amt is not None:
+        order_fields["total_amount"] = total_amt
+    paid_amt = detail_data.get("paid_amount")
+    if paid_amt is not None:
+        order_fields["paid_amount"] = paid_amt
+    adult_cnt = detail_data.get("adult_count")
+    if adult_cnt is not None and adult_cnt > 0:
+        order_fields["adult_count"] = adult_cnt
+    child_cnt = detail_data.get("child_count")
+    if child_cnt is not None:
+        order_fields["child_count"] = child_cnt
+    room_cnt = detail_data.get("room_count")
+    if room_cnt is not None:
+        order_fields["room_count"] = room_cnt
+    room_sharing = detail_data.get("room_sharing") or ""
+    # 拼房信息已存入 vbk_detail_snapshot 的 raw_json，无需额外存储
+
+    if order_fields:
+        from database import db_cursor, utc_now_str
+        sets = ", ".join(f"{k} = ?" for k in order_fields)
+        vals = list(order_fields.values())
+        with db_cursor() as conn:
+            conn.execute(f"UPDATE orders SET {sets}, updated_at = ? WHERE id = ?", vals + [utc_now_str(), order_id])
+
     return {
         "ok": True,
         "order_id": order_id,
@@ -945,6 +1021,7 @@ def sync_vbk_detail_to_local(order_id: int, detail_data: dict[str, Any]) -> dict
         "traveller_count": len(travellers),
         "pickup_dropoff_count": len(pickup_dropoff),
         "snapshot_updated": True,
+        "orders_updated": list(order_fields.keys()),
     }
 
 

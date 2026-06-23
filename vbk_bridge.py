@@ -54,7 +54,7 @@ class ChromeVbkBridge:
         except Exception as e:
             raise VbkBridgeError(f"CDP 请求失败: {path} {e}") from e
 
-    def _open_detail_page(self, order_no: str, list_kind: str = "order") -> str:
+    def _open_detail_page(self, order_no: str, list_kind: str = "order") -> tuple[str, str]:
         item = self.search_order_by_order_no(order_no, list_kind=list_kind)
         if not item:
             raise VbkBridgeError(f"未在 VBK {list_kind} 列表中找到订单号 {order_no}")
@@ -65,9 +65,10 @@ class ChromeVbkBridge:
         )
         created = self._cdp_request("/json/new?" + urllib.parse.quote(target_url, safe=':/?=&'), http_method='PUT', timeout=15)
         ws_url = created.get("webSocketDebuggerUrl") if isinstance(created, dict) else None
+        target_id = created.get("id") if isinstance(created, dict) else None
         if not ws_url:
             raise VbkBridgeError("打开 VBK 详情页失败")
-        return ws_url
+        return ws_url, target_id
 
     def _get_page_target(self, list_kind: str = "order") -> dict[str, Any]:
         target_url = VBK_ORDER_LIST_URL if list_kind == "order" else VBK_HOLD_LIST_URL
@@ -325,6 +326,7 @@ class ChromeVbkBridge:
             raise ValueError("订单号不能为空")
 
         detail_target = None
+        opened_new = False
         try:
             with urllib.request.urlopen(DEBUG_LIST_ENDPOINT, timeout=5) as resp:
                 targets = json.load(resp)
@@ -342,47 +344,49 @@ class ChromeVbkBridge:
 
         if detail_target and detail_target.get("webSocketDebuggerUrl"):
             ws_url = detail_target["webSocketDebuggerUrl"]
+            target_id = detail_target.get("id")
+            opened_new = False
         else:
-            ws_url = self._open_detail_page(order_no, list_kind=list_kind)
+            ws_url, target_id = self._open_detail_page(order_no, list_kind=list_kind)
+            opened_new = True
 
-        async def _run():
-            async with websockets.connect(ws_url, max_size=20_000_000) as conn:
-                state = {"id": 0}
-                await self._call(conn, state, "Page.enable")
-                await self._call(conn, state, "Runtime.enable")
-                await self._call(
-                    conn,
-                    state,
-                    "Runtime.evaluate",
-                    {"expression": "new Promise(r => setTimeout(r, 3000))", "returnByValue": True, "awaitPromise": True},
-                    timeout=20,
-                )
+        try:
+            async def _run():
+                async with websockets.connect(ws_url, max_size=20_000_000) as conn:
+                    state = {"id": 0}
+                    await self._call(conn, state, "Page.enable")
+                    await self._call(conn, state, "Runtime.enable")
+                    await self._call(
+                        conn,
+                        state,
+                        "Runtime.evaluate",
+                        {"expression": "new Promise(r => setTimeout(r, 3000))", "returnByValue": True, "awaitPromise": True},
+                        timeout=20,
+                    )
 
-                pre = await self._call(
-                    conn,
-                    state,
-                    "Runtime.evaluate",
-                    {
-                        "expression": "({title: document.title, bodyText: document.body ? document.body.innerText : '', tableTexts: [...document.querySelectorAll('table')].map(t => t.innerText || '')})",
-                        "returnByValue": True,
-                        "awaitPromise": True,
-                    },
-                    timeout=60,
-                )
-                pre_value = pre.get("result", {}).get("result", {}).get("value") or {}
+                    pre = await self._call(
+                        conn,
+                        state,
+                        "Runtime.evaluate",
+                        {
+                            "expression": "({title: document.title, bodyText: document.body ? document.body.innerText : '', tableTexts: [...document.querySelectorAll('table')].map(t => t.innerText || '')})",
+                            "returnByValue": True,
+                            "awaitPromise": True,
+                        },
+                        timeout=60,
+                    )
+                    pre_value = pre.get("result", {}).get("result", {}).get("value") or {}
 
-                await self._call(
-                    conn,
-                    state,
-                    "Runtime.evaluate",
-                    {
-                        "expression": '''(() => {
+                    await self._call(
+                        conn,
+                        state,
+                        "Runtime.evaluate",
+                        {
+                            "expression": '''(() => {
   const el = document.evaluate("//*[contains(text(),'加密信息')]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
   if (!el) return {clicked: false, reason: 'not found'};
-  // 如果已经是"隐藏加密信息"(已解密)，无需点击
   const text = (el.innerText || el.textContent || '').trim();
   if (text.includes('隐藏')) return {clicked: false, reason: 'already revealed', buttonText: text};
-  // 否则找到可点击的元素并点击
   let target = el;
   while (target && target !== document.body) {
     const tag = target.tagName.toLowerCase();
@@ -396,34 +400,48 @@ class ChromeVbkBridge:
   try { target.dispatchEvent(new MouseEvent('click', {bubbles: true, view: window})); } catch(e) {}
   return {clicked: true, targetTag: target.tagName, buttonText: text};
 })()''',
-                        "returnByValue": True,
-                        "awaitPromise": True,
-                    },
-                    timeout=30,
-                )
-                await self._call(
-                    conn,
-                    state,
-                    "Runtime.evaluate",
-                    {"expression": "new Promise(r => setTimeout(r, 5000))", "returnByValue": True, "awaitPromise": True},
-                    timeout=20,
-                )
+                            "returnByValue": True,
+                            "awaitPromise": True,
+                        },
+                        timeout=30,
+                    )
+                    await self._call(
+                        conn,
+                        state,
+                        "Runtime.evaluate",
+                        {"expression": "new Promise(r => setTimeout(r, 5000))", "returnByValue": True, "awaitPromise": True},
+                        timeout=20,
+                    )
 
-                post = await self._call(
-                    conn,
-                    state,
-                    "Runtime.evaluate",
-                    {
-                        "expression": "({bodyText: document.body ? document.body.innerText : '', tableTexts: [...document.querySelectorAll('table')].map(t => t.innerText || '')})",
-                        "returnByValue": True,
-                        "awaitPromise": True,
-                    },
-                    timeout=60,
-                )
-                post_value = post.get("result", {}).get("result", {}).get("value") or {}
-                return pre_value, post_value
+                    post = await self._call(
+                        conn,
+                        state,
+                        "Runtime.evaluate",
+                        {
+                            "expression": "({bodyText: document.body ? document.body.innerText : '', tableTexts: [...document.querySelectorAll('table')].map(t => t.innerText || '')})",
+                            "returnByValue": True,
+                            "awaitPromise": True,
+                        },
+                        timeout=60,
+                    )
+                    post_value = post.get("result", {}).get("result", {}).get("value") or {}
+                    return pre_value, post_value
 
-        pre_value, post_value = asyncio.run(_run())
+            pre_value, post_value = asyncio.run(_run())
+        finally:
+            # Close the newly created tab after extraction
+            if opened_new and target_id:
+                try:
+                    with urllib.request.urlopen(
+                        urllib.request.Request(
+                            f"http://127.0.0.1:9222/json/close/{target_id}",
+                            method="GET",
+                        ),
+                        timeout=5,
+                    ):
+                        pass
+                except Exception:
+                    pass
         body_text = str(post_value.get("bodyText") or pre_value.get("bodyText") or "")
         table_texts = post_value.get("tableTexts") or pre_value.get("tableTexts") or []
         if not body_text:
@@ -602,6 +620,77 @@ def parse_vbk_detail_from_text(order_no: str, list_kind: str, body_text: str, ta
             "enabled": True,
         })
 
+    # Parse amounts from detail page
+    def parse_amount_text(pattern: str) -> float | None:
+        import re
+        m = re.search(pattern, body_text)
+        if m:
+            raw = m.group(1).replace(",", "").strip()
+            try:
+                return float(raw)
+            except ValueError:
+                return None
+        return None
+
+    # total_amount: "订单总额" (hold) or "订单总额 12345.00CNY" (standard)
+    # 标准单格式: "总计：5372.81CNY" after 订单总额
+    def parse_total_amount() -> float | None:
+        import re
+        # Try hold-order pattern: "订单基本金额: CNY7,410.00" or "订单基本金额: CNY 7,410.00"
+        m = re.search(r"订单基本金额[:：]?\s*CNY\s*([0-9,]+\.\d{2})", body_text)
+        if m:
+            return float(m.group(1).replace(",", ""))
+        # Standard order: "订单总额[\\s\\S]*?总计[：:]?([0-9,]+\.\d{2})CNY"
+        m = re.search(r"总计[：:]?\s*([0-9,]+\.\d{2})CNY", body_text)
+        if m:
+            return float(m.group(1).replace(",", ""))
+        return None
+
+    def parse_paid_amount() -> float | None:
+        import re
+        # "已付金额：5372.81CNY" or "已付金额 5372.81"
+        m = re.search(r"已付金额[：:]?\s*([0-9,]+\.\d{2})", body_text)
+        if m:
+            return float(m.group(1).replace(",", ""))
+        # Also check for "已付款" badges without specific amount
+        return None
+
+    def parse_room_sharing() -> str:
+        import re
+        m = re.search(r"拼房[：:]?\s*([^\n]+)", body_text)
+        return m.group(1).strip() if m else ""
+
+    def parse_room_count() -> int | None:
+        import re
+        m = re.search(r"房间数[：:]?\s*(\d+)", body_text)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                return None
+        return None
+
+    def parse_adult_child_count() -> tuple[int, int]:
+        import re
+        # "总人数：2人（2成人 0儿童 0婴儿）"
+        m = re.search(r"总人数[：:]?\s*\d+人[（(]\s*(\d+)成人\s*(\d+)儿童", body_text)
+        if m:
+            return int(m.group(1)), int(m.group(2))
+        # "成人数：2" + "儿童数：0"
+        adult = 0
+        child = 0
+        m_a = re.search(r"成人数[：:]?\s*(\d+)", body_text)
+        if m_a:
+            adult = int(m_a.group(1))
+        m_c = re.search(r"儿童数[：:]?\s*(\d+)", body_text)
+        if m_c:
+            child = int(m_c.group(1))
+        return adult, child
+
+    adult_count, child_count = parse_adult_child_count()
+    total_amount = parse_total_amount()
+    paid_amount = parse_paid_amount()
+
     return {
         "order_no": order_no,
         "list_kind": list_kind,
@@ -614,9 +703,17 @@ def parse_vbk_detail_from_text(order_no: str, list_kind: str, body_text: str, ta
         "customer_name": get(r"(?:联系人|占位联系人)[:：]?\s*([^\n]+)"),
         "customer_phone": get(r"手机\s*([^\n]+)"),
         "distribution_channel": get(r"(?:分销渠道|占位单渠道)[:：]?\s*([^\n]+)"),
+        "supplier_product_name": get(r"供应商产品名称[:：]?\s*([^\n]+)"),
+        "product_id": get(r"携程产品ID[:：]?\s*(\d+)"),
         "scenic_booking_no": get(r"订单编号[:：]?\s*([^\n]+)"),
         "reservation_scenic_name": "无需预约" if "无需预约" in body_text else "",
         "merchant_note": get(r"商家备注[:：]?\s*([^\n]+)"),
+        "total_amount": total_amount,
+        "paid_amount": paid_amount,
+        "room_sharing": parse_room_sharing(),
+        "room_count": parse_room_count(),
+        "adult_count": adult_count or None,
+        "child_count": child_count or None,
         "travellers": travellers,
         "pickup_dropoff": pickup_dropoff,
         "flights": flights,

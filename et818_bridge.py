@@ -4,6 +4,7 @@ import asyncio
 import json
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -15,6 +16,7 @@ TARGET_URL_PREFIX = "https://t16.et818.com/XWJ/SysMain"
 DETAIL_URL_TEMPLATE = "/XWJ/PlanReg/View/PlanMng.ListRegDSN1?pa=3&PlanID={plan_id}&BizMode={biz_mode}&FixedPlanClass=&FixedTourType=&RegID={reg_id}"
 EDIT_URL_TEMPLATE = "/XWJ/PlanReg/AddDSN/PlanMng.ListRegDSN1?pa=3&PlanID={plan_id}&BizMode={biz_mode}&FixedPlanClass=&FixedTourType=&RegID={reg_id}&isRegDelete="
 SEARCH_ENDPOINT = "https://t16.et818.com/XWJ/PlanReg/SearchReg/PlanMng.ListRegDSN1"
+SESSION_FILE = Path(__file__).resolve().parent / "data" / "et818_session.json"
 
 
 class Et818BridgeError(RuntimeError):
@@ -123,9 +125,65 @@ class ChromeEt818Bridge:
             raise Et818BridgeError((data or {}).get("error") or "未能读取 ET818 当前查询模板")
         return data.get("query") or {}
 
+    @staticmethod
+    def session_file_path() -> Path:
+        return SESSION_FILE
+
+    def save_session_to_disk(self) -> dict[str, Any]:
+        """Grab cookies + template from CDP and save to disk."""
+        cookies = self.get_cookies()
+        template = self.get_live_query_template()
+        SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SESSION_FILE.write_text(
+            json.dumps(
+                {
+                    "cookies": cookies,
+                    "template": template,
+                    "saved_at": __import__("datetime").datetime.now().isoformat(),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return {"ok": True, "cookie_count": len(cookies), "path": str(SESSION_FILE)}
+
+    @staticmethod
+    def load_session_from_disk() -> dict[str, Any] | None:
+        """Load saved session. Returns None if file missing."""
+        if not SESSION_FILE.exists():
+            return None
+        try:
+            data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+            return data
+        except (json.JSONDecodeError, OSError):
+            return None
+
     def _search_via_requests(self, order_no: str) -> dict[str, Any]:
+        cookies = None
+        payload = None
+
+        # Try saved session first (no CDP needed)
+        saved = self.load_session_from_disk()
+        if saved:
+            cookies = saved.get("cookies")
+            payload = dict(saved.get("template", {}))
+            if cookies and payload:
+                result = self._do_search_request(order_no, cookies, payload)
+                if result is not None:
+                    return result
+
+        # Fall back to CDP for fresh cookies + template
         cookies = self.get_cookies()
         payload = self.get_live_query_template()
+        result = self._do_search_request(order_no, cookies, payload)
+        if result is None:
+            raise Et818BridgeError("易途搜索失败：会话过期且 CDP 降级也未能获取搜索结果")
+        return result
+
+    def _do_search_request(self, order_no: str, cookies: dict[str, str], payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Execute the search POST. Returns None if session expired (auth failure)."""
+        payload = dict(payload)
         payload["HasKeyWord"] = ""
         payload["BeginDate"] = ""
         payload["EndDate"] = ""
@@ -148,19 +206,28 @@ class ChromeEt818Bridge:
             }
         )
         resp = session.post(SEARCH_ENDPOINT, data=payload, cookies=cookies, timeout=30)
+        if resp.status_code == 302 or resp.status_code == 401:
+            # Session expired — fall back to CDP
+            return None
         if resp.status_code != 200:
             raise Et818BridgeError(f"ET818 搜索接口返回异常：HTTP {resp.status_code}")
         try:
             data = resp.json()
         except Exception as e:
             raise Et818BridgeError("ET818 搜索接口未返回有效 JSON") from e
+        if isinstance(data, dict) and data.get("IsLogin") is False:
+            # Session expired (ASP.NET forms auth redirect)
+            return None
         return {"request_query": payload, "response": data}
 
     def find_by_order_no(self, order_no: str) -> list[Et818OrderMatch]:
         order_no = (order_no or "").strip()
         if not order_no:
             raise Et818BridgeError("订单号不能为空")
-        self.ensure_sysmain()
+        # Skip SysMain check if we have a saved session (no CDP needed)
+        saved_session = self.load_session_from_disk()
+        if not saved_session:
+            self.ensure_sysmain()
         result = self._search_via_requests(order_no)
         rows = result.get("response", {}).get("Rows") or []
         matches: list[Et818OrderMatch] = []
@@ -199,12 +266,12 @@ class ChromeEt818Bridge:
     def build_detail_url(self, reg_id: int, biz_mode: int | None = 15, plan_id: int | None = 0) -> str:
         mode = 15 if biz_mode in (None, "") else int(biz_mode)
         plan = 0 if plan_id in (None, "") else int(plan_id)
-        return DETAIL_URL_TEMPLATE.format(plan_id=plan, biz_mode=mode, reg_id=int(reg_id))
+        return f"https://t16.et818.com{DETAIL_URL_TEMPLATE.format(plan_id=plan, biz_mode=mode, reg_id=int(reg_id))}"
 
     def build_edit_url(self, reg_id: int, biz_mode: int | None = 15, plan_id: int | None = 0) -> str:
         mode = 15 if biz_mode in (None, "") else int(biz_mode)
         plan = 0 if plan_id in (None, "") else int(plan_id)
-        return EDIT_URL_TEMPLATE.format(plan_id=plan, biz_mode=mode, reg_id=int(reg_id))
+        return f"https://t16.et818.com{EDIT_URL_TEMPLATE.format(plan_id=plan, biz_mode=mode, reg_id=int(reg_id))}"
 
     def open_detail(self, reg_id: int, biz_mode: int | None = 15, plan_id: int | None = 0) -> str:
         detail_url = self.build_detail_url(reg_id=reg_id, biz_mode=biz_mode, plan_id=plan_id)
@@ -253,3 +320,40 @@ class ChromeEt818Bridge:
         if not isinstance(data, dict) or not data.get("ok"):
             raise Et818BridgeError("已命中订单，但打开编辑页失败")
         return data.get("edit_url") or edit_url
+
+    def open_login_page(self) -> dict[str, Any]:
+        """Navigate debug Chrome to 易途 login page and return."""
+        import urllib.request, json as _json
+        try:
+            with urllib.request.urlopen(DEBUG_ENDPOINT, timeout=5) as resp:
+                targets = _json.load(resp)
+        except Exception as e:
+            raise Et818BridgeError("未检测到 9222 调试浏览器，请先启动调试模式 Chrome/Edge") from e
+
+        # Find an existing page or create a new one
+        target = None
+        for t in targets:
+            if t.get("type") == "page":
+                target = t
+                break
+        if not target:
+            raise Et818BridgeError("调试浏览器中没有可用页面")
+
+        # Navigate to login page
+        ws_url = target.get("webSocketDebuggerUrl")
+        if not ws_url:
+            raise Et818BridgeError("未获取到调试浏览器 websocket 地址")
+
+        async def _go():
+            async with websockets.connect(ws_url, max_size=5_000_000) as conn:
+                state = {"id": 0}
+                await self._call(conn, state, "Page.enable")
+                await self._call(
+                    conn, state, "Page.navigate",
+                    {"url": "https://t16.et818.com/XWJ/Login/Logout"},
+                    timeout=15,
+                )
+                return {"ok": True}
+
+        asyncio.run(_go())
+        return {"ok": True, "url": "https://t16.et818.com/XWJ/"}
